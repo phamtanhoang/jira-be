@@ -17,6 +17,7 @@ import {
   accessTokenCookieOptions,
   refreshTokenCookieOptions,
 } from '../../core/constants/cookie.constant.js';
+import { MSG } from '../../core/constants/message.constant.js';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -78,7 +79,7 @@ export class AuthController {
     if (!refreshToken) {
       return res.status(HttpStatus.UNAUTHORIZED).json({
         statusCode: HttpStatus.UNAUTHORIZED,
-        message: 'Refresh token not found',
+        message: MSG.REFRESH_TOKEN_NOT_FOUND,
       });
     }
 
@@ -113,7 +114,7 @@ export class AuthController {
     res.clearCookie(COOKIE_KEYS.ACCESS_TOKEN);
     res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, { path: '/auth/refresh' });
 
-    return { message: 'Logged out successfully' };
+    return { message: MSG.LOGOUT_SUCCESS };
   }
 
   @Get('me')

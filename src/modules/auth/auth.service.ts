@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { hash, compare } from 'bcryptjs';
 import { randomInt, randomUUID } from 'crypto';
+import { MSG } from '../../core/constants/message.constant.js';
 import { PrismaService } from '../../core/database/prisma.service.js';
 import { MailService } from '../../core/mail/mail.service.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -29,7 +30,7 @@ export class AuthService {
 
     if (existing) {
       if (existing.emailVerified) {
-        throw new ConflictException('Email already registered');
+        throw new ConflictException(MSG.EMAIL_ALREADY_REGISTERED);
       }
 
       const hasValidToken = existing.verificationTokens.some(
@@ -37,9 +38,7 @@ export class AuthService {
       );
 
       if (hasValidToken) {
-        throw new ConflictException(
-          'Email already registered. Please check your email for the verification code.',
-        );
+        throw new ConflictException(MSG.EMAIL_PENDING_VERIFICATION);
       }
 
       // Unverified + all tokens expired → delete and allow re-register
@@ -69,29 +68,25 @@ export class AuthService {
 
     await this.mail.sendVerificationEmail(dto.email, otp);
 
-    return {
-      message:
-        'Registration successful. Please check your email for the verification code.',
-      userId: user.id,
-    };
+    return { message: MSG.REGISTER_SUCCESS, userId: user.id };
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
-    if (!user) throw new BadRequestException('User not found');
+    if (!user) throw new BadRequestException(MSG.USER_NOT_FOUND);
 
     const record = await this.prisma.verificationToken.findFirst({
       where: { userId: user.id, token: dto.token },
     });
 
-    if (!record) throw new BadRequestException('Invalid verification code');
+    if (!record) throw new BadRequestException(MSG.INVALID_VERIFICATION_CODE);
     if (record.expires < new Date()) {
       await this.prisma.verificationToken.delete({
         where: { id: record.id },
       });
-      throw new BadRequestException('Verification code has expired');
+      throw new BadRequestException(MSG.VERIFICATION_CODE_EXPIRED);
     }
 
     await this.prisma.$transaction([
@@ -104,7 +99,7 @@ export class AuthService {
       }),
     ]);
 
-    return { message: 'Email verified successfully' };
+    return { message: MSG.EMAIL_VERIFIED };
   }
 
   async login(dto: LoginDto) {
@@ -112,14 +107,14 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (!user || !user.password) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(MSG.INVALID_CREDENTIALS);
     }
 
     const valid = await compare(dto.password, user.password);
-    if (!valid) throw new UnauthorizedException('Invalid credentials');
+    if (!valid) throw new UnauthorizedException(MSG.INVALID_CREDENTIALS);
 
     if (!user.emailVerified) {
-      throw new UnauthorizedException('Please verify your email first');
+      throw new UnauthorizedException(MSG.EMAIL_NOT_VERIFIED);
     }
 
     const tokens = await this.generateTokens(user.id, user.email);
@@ -138,7 +133,7 @@ export class AuthService {
           where: { id: record.id },
         });
       }
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new UnauthorizedException(MSG.REFRESH_TOKEN_INVALID);
     }
 
     // Rotate: delete old, create new
@@ -154,7 +149,7 @@ export class AuthService {
     await this.prisma.refreshToken.deleteMany({
       where: { token: refreshToken },
     });
-    return { message: 'Logged out successfully' };
+    return { message: MSG.LOGOUT_SUCCESS };
   }
 
   private async generateTokens(userId: string, email: string) {
