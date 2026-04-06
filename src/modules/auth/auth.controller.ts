@@ -12,6 +12,11 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { CurrentUser } from '../../core/decorators/current-user.decorator.js';
 import { Public } from '../../core/decorators/public.decorator.js';
+import {
+  COOKIE_KEYS,
+  accessTokenCookieOptions,
+  refreshTokenCookieOptions,
+} from '../../core/constants/cookie.constant.js';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -47,20 +52,16 @@ export class AuthController {
   ) {
     const tokens = await this.authService.login(dto);
 
-    res.cookie('access_token', tokens.accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: tokens.expiresIn * 1000,
-    });
-
-    res.cookie('refresh_token', tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/auth/refresh',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie(
+      COOKIE_KEYS.ACCESS_TOKEN,
+      tokens.accessToken,
+      accessTokenCookieOptions(tokens.expiresIn),
+    );
+    res.cookie(
+      COOKIE_KEYS.REFRESH_TOKEN,
+      tokens.refreshToken,
+      refreshTokenCookieOptions(),
+    );
 
     return tokens;
   }
@@ -73,7 +74,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken = req.cookies?.refresh_token;
+    const refreshToken = req.cookies?.[COOKIE_KEYS.REFRESH_TOKEN];
     if (!refreshToken) {
       return res.status(HttpStatus.UNAUTHORIZED).json({
         statusCode: HttpStatus.UNAUTHORIZED,
@@ -83,20 +84,16 @@ export class AuthController {
 
     const tokens = await this.authService.refresh(refreshToken);
 
-    res.cookie('access_token', tokens.accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: tokens.expiresIn * 1000,
-    });
-
-    res.cookie('refresh_token', tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/auth/refresh',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie(
+      COOKIE_KEYS.ACCESS_TOKEN,
+      tokens.accessToken,
+      accessTokenCookieOptions(tokens.expiresIn),
+    );
+    res.cookie(
+      COOKIE_KEYS.REFRESH_TOKEN,
+      tokens.refreshToken,
+      refreshTokenCookieOptions(),
+    );
 
     return tokens;
   }
@@ -108,13 +105,13 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken = req.cookies?.refresh_token;
+    const refreshToken = req.cookies?.[COOKIE_KEYS.REFRESH_TOKEN];
     if (refreshToken) {
       await this.authService.logout(refreshToken);
     }
 
-    res.clearCookie('access_token');
-    res.clearCookie('refresh_token', { path: '/auth/refresh' });
+    res.clearCookie(COOKIE_KEYS.ACCESS_TOKEN);
+    res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, { path: '/auth/refresh' });
 
     return { message: 'Logged out successfully' };
   }

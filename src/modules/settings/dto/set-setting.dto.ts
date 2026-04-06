@@ -1,13 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty } from 'class-validator';
+import { Prisma } from '@prisma/client';
 
 export class SetSettingDto {
-  @ApiProperty({ example: 'app_name' })
-  @IsString()
-  @IsNotEmpty()
-  key!: string;
-
   @ApiProperty({ example: 'Jira Clone', description: 'Any JSON value' })
   @IsNotEmpty()
-  value!: any;
+  value!: Prisma.InputJsonValue;
 }

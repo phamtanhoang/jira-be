@@ -24,8 +24,27 @@ export class AuthService {
   async register(dto: RegisterDto) {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
+      include: { verificationTokens: true },
     });
-    if (existing) throw new ConflictException('Email already registered');
+
+    if (existing) {
+      if (existing.emailVerified) {
+        throw new ConflictException('Email already registered');
+      }
+
+      const hasValidToken = existing.verificationTokens.some(
+        (t) => t.expires > new Date(),
+      );
+
+      if (hasValidToken) {
+        throw new ConflictException(
+          'Email already registered. Please check your email for the verification code.',
+        );
+      }
+
+      // Unverified + all tokens expired → delete and allow re-register
+      await this.prisma.user.delete({ where: { id: existing.id } });
+    }
 
     const hashedPassword = await hash(dto.password, 12);
 
