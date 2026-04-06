@@ -1,5 +1,6 @@
 model Setting {
-  key       String   @id
-  value     String
-  updatedAt DateTime @updatedAt
+  id         String              @id @default(uuid())
+  key        String              @unique
+  value      Json
+  updatedAt  DateTime            @updatedAt
 }

@@ -4,9 +4,9 @@ import { IsEmail, IsString } from 'class-validator';
 export class LoginDto {
   @ApiProperty({ example: 'john@example.com' })
   @IsEmail()
-  email: string;
+  email!: string;
 
   @ApiProperty({ example: 'password123' })
   @IsString()
-  password: string;
+  password!: string;
 }

@@ -1,15 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
 
 @Injectable()
 export class MailService {
-  private readonly resend: Resend;
+  private readonly resend = new Resend(process.env.RESEND_API_KEY);
   private readonly logger = new Logger(MailService.name);
-
-  constructor(private configService: ConfigService) {
-    this.resend = new Resend(this.configService.get<string>('resend.apiKey'));
-  }
 
   async sendVerificationEmail(email: string, otp: string): Promise<void> {
     try {

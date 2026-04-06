@@ -4,7 +4,6 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { hash, compare } from 'bcryptjs';
 import { randomInt, randomUUID } from 'crypto';
@@ -19,7 +18,6 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
-    private config: ConfigService,
     private mail: MailService,
   ) {}
 
@@ -40,13 +38,13 @@ export class AuthService {
     });
 
     const otp = randomInt(100000, 999999).toString();
-    const verifyExpiry = this.config.get<number>('jwt.tokenVerifyExpiry');
+    const verifyExpiry = parseInt(process.env.TOKEN_VERIFY_EXPIRY!);
 
     await this.prisma.verificationToken.create({
       data: {
-        email: dto.email,
+        userId: user.id,
         token: otp,
-        expires: new Date(Date.now() + verifyExpiry! * 1000),
+        expires: new Date(Date.now() + verifyExpiry * 1000),
       },
     });
 
@@ -60,8 +58,13 @@ export class AuthService {
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+    if (!user) throw new BadRequestException('User not found');
+
     const record = await this.prisma.verificationToken.findFirst({
-      where: { email: dto.email, token: dto.token },
+      where: { userId: user.id, token: dto.token },
     });
 
     if (!record) throw new BadRequestException('Invalid verification code');
@@ -74,11 +77,11 @@ export class AuthService {
 
     await this.prisma.$transaction([
       this.prisma.user.update({
-        where: { email: dto.email },
+        where: { id: user.id },
         data: { emailVerified: new Date() },
       }),
       this.prisma.verificationToken.deleteMany({
-        where: { email: dto.email },
+        where: { userId: user.id },
       }),
     ]);
 
@@ -124,10 +127,7 @@ export class AuthService {
       where: { id: record.id },
     });
 
-    const tokens = await this.generateTokens(
-      record.user.id,
-      record.user.email,
-    );
+    const tokens = await this.generateTokens(record.user.id, record.user.email);
     return tokens;
   }
 
@@ -139,10 +139,8 @@ export class AuthService {
   }
 
   private async generateTokens(userId: string, email: string) {
-    const accessExpiry =
-      this.config.get<number>('jwt.accessTokenExpiration') ?? 900;
-    const refreshExpiry =
-      this.config.get<number>('jwt.refreshTokenExpiration') ?? 604800;
+    const accessExpiry = parseInt(process.env.JWT_ACCESS_TOKEN_EXPIRATION!);
+    const refreshExpiry = parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRATION!);
 
     const accessToken = this.jwt.sign(
       { sub: userId, email },

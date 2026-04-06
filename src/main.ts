@@ -1,6 +1,6 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
@@ -9,13 +9,12 @@ import { AllExceptionsFilter } from './core/filters/http-exception.filter.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const configService = app.get(ConfigService);
 
   // Security
   app.use(helmet());
   app.use(cookieParser());
   app.enableCors({
-    origin: configService.get<string>('cors.origin'),
+    origin: process.env.CORS_ORIGIN,
     credentials: true,
   });
 
@@ -42,8 +41,8 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api', app, document);
 
-  const port = configService.get<number>('port');
-  await app.listen(port!);
+  const port = process.env.PORT!;
+  await app.listen(port);
   console.log(`Server running on http://localhost:${port}`);
   console.log(`Swagger docs: http://localhost:${port}/api`);
 }
