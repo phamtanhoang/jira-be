@@ -4,8 +4,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
-import { AppModule } from './app.module.js';
-import { AllExceptionsFilter } from './core/filters/http-exception.filter.js';
+import { AppModule } from './app.module';
+import { AllExceptionsFilter } from '@/core/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

@@ -6,7 +6,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { MSG } from '../constants/index.js';
+import { MSG } from '@/core/constants';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {

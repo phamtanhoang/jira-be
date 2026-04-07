@@ -1,9 +1,9 @@
 import { Body, Controller, Get, Param, Put } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ENDPOINTS } from '../../core/constants';
-import { Public, Roles } from '../../core/decorators';
-import { SetSettingDto } from './dto/set-setting.dto.js';
-import { SettingsService } from './settings.service.js';
+import { ENDPOINTS } from '@/core/constants';
+import { Public, Roles } from '@/core/decorators';
+import { SetSettingDto } from './dto/set-setting.dto';
+import { SettingsService } from './settings.service';
 
 const E = ENDPOINTS.SETTINGS;
 

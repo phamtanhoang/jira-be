@@ -10,18 +10,18 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import { CurrentUser, Public } from '../../core/decorators/index.js';
+import { CurrentUser, Public } from '@/core/decorators';
 import {
   COOKIE_KEYS,
   ENDPOINTS,
   MSG,
   accessTokenCookieOptions,
   refreshTokenCookieOptions,
-} from '../../core/constants/index.js';
-import { AuthService } from './auth.service.js';
-import { LoginDto } from './dto/login.dto.js';
-import { RegisterDto } from './dto/register.dto.js';
-import { VerifyEmailDto } from './dto/verify-email.dto.js';
+} from '@/core/constants';
+import { AuthService } from './auth.service';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 
 const E = ENDPOINTS.AUTH;
 

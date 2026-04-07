@@ -7,12 +7,12 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { hash, compare } from 'bcryptjs';
 import { randomInt, randomUUID } from 'crypto';
-import { MSG } from '../../core/constants/index.js';
-import { PrismaService } from '../../core/database/prisma.service.js';
-import { MailService } from '../../core/mail/mail.service.js';
-import { RegisterDto } from './dto/register.dto.js';
-import { LoginDto } from './dto/login.dto.js';
-import { VerifyEmailDto } from './dto/verify-email.dto.js';
+import { MSG } from '@/core/constants';
+import { PrismaService } from '@/core/database/prisma.service';
+import { MailService } from '@/core/mail/mail.service';
+import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 
 @Injectable()
 export class AuthService {

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { MSG, SETTING_KEYS } from '../../core/constants/index.js';
-import { PrismaService } from '../../core/database/prisma.service.js';
+import { MSG, SETTING_KEYS } from '@/core/constants';
+import { PrismaService } from '@/core/database/prisma.service';
 
 @Injectable()
 export class SettingsService {
