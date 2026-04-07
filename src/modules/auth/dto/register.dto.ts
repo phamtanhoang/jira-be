@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsString, Matches, MinLength } from 'class-validator';
-import { REGEX } from '../../../core/constants/validation.constant.js';
+import { REGEX } from '../../../core/constants/index.js';
 
 export class RegisterDto {
   @ApiProperty({ example: 'John Doe' })

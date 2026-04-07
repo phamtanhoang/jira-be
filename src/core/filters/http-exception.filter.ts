@@ -6,7 +6,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { MSG } from '../constants/message.constant.js';
+import { MSG } from '../constants/index.js';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -22,7 +22,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const message =
       exception instanceof HttpException
         ? exception.getResponse()
-        : MSG.INTERNAL_SERVER_ERROR;
+        : MSG.ERROR.INTERNAL_SERVER_ERROR;
 
     response.status(status).json({
       statusCode: status,

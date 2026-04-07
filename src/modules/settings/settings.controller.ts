@@ -1,30 +1,32 @@
 import { Body, Controller, Get, Param, Put } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Public } from '../../core/decorators/public.decorator.js';
-import { Roles } from '../../core/decorators/roles.decorator.js';
+import { ENDPOINTS } from '../../core/constants';
+import { Public, Roles } from '../../core/decorators';
 import { SetSettingDto } from './dto/set-setting.dto.js';
 import { SettingsService } from './settings.service.js';
 
+const E = ENDPOINTS.SETTINGS;
+
 @ApiTags('Settings')
-@Controller('settings')
+@Controller(E.BASE)
 export class SettingsController {
   constructor(private settingsService: SettingsService) {}
 
   @Public()
-  @Get('app-info')
+  @Get(E.APP_INFO)
   @ApiOperation({ summary: 'Get app info (name, logo, description)' })
   getAppInfo() {
     return this.settingsService.getAppInfo();
   }
 
-  @Get(':key')
+  @Get(E.BY_KEY)
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Get a setting by key (Admin only)' })
   getByKey(@Param('key') key: string) {
     return this.settingsService.getByKey(key);
   }
 
-  @Put(':key')
+  @Put(E.BY_KEY)
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Create or update a setting by key (Admin only)' })
   setByKey(@Param('key') key: string, @Body() dto: SetSettingDto) {

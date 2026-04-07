@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
 import { PrismaService } from '../database/prisma.service.js';
-import { SETTING_KEYS } from '../constants/settings.constant.js';
+import { SETTING_KEYS } from '../constants/index.js';
 import { verifyEmailTemplate } from './templates/verify-email.template.js';
 
 interface AppInfo {
@@ -22,7 +22,7 @@ export class MailService {
     });
     const value = setting?.value as Record<string, string> | null;
     return {
-      name: value?.name ?? 'Jira App',
+      name: value?.name ?? '',
       logoUrl: value?.logoUrl ?? '',
     };
   }

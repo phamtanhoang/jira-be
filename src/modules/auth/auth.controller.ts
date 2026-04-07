@@ -10,33 +10,35 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import { CurrentUser } from '../../core/decorators/current-user.decorator.js';
-import { Public } from '../../core/decorators/public.decorator.js';
+import { CurrentUser, Public } from '../../core/decorators/index.js';
 import {
   COOKIE_KEYS,
+  ENDPOINTS,
+  MSG,
   accessTokenCookieOptions,
   refreshTokenCookieOptions,
-} from '../../core/constants/cookie.constant.js';
-import { MSG } from '../../core/constants/message.constant.js';
+} from '../../core/constants/index.js';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { VerifyEmailDto } from './dto/verify-email.dto.js';
 
+const E = ENDPOINTS.AUTH;
+
 @ApiTags('Auth')
-@Controller('auth')
+@Controller(E.BASE)
 export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Public()
-  @Post('register')
+  @Post(E.REGISTER)
   @ApiOperation({ summary: 'Register a new user' })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
 
   @Public()
-  @Post('verify-email')
+  @Post(E.VERIFY_EMAIL)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify email with 6-digit OTP' })
   verifyEmail(@Body() dto: VerifyEmailDto) {
@@ -44,7 +46,7 @@ export class AuthController {
   }
 
   @Public()
-  @Post('login')
+  @Post(E.LOGIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login and receive JWT tokens' })
   async login(
@@ -68,18 +70,19 @@ export class AuthController {
   }
 
   @Public()
-  @Post('refresh')
+  @Post(E.REFRESH)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token' })
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken = req.cookies?.[COOKIE_KEYS.REFRESH_TOKEN];
+    const cookies = req.cookies as Record<string, string> | undefined;
+    const refreshToken = cookies?.[COOKIE_KEYS.REFRESH_TOKEN];
     if (!refreshToken) {
       return res.status(HttpStatus.UNAUTHORIZED).json({
         statusCode: HttpStatus.UNAUTHORIZED,
-        message: MSG.REFRESH_TOKEN_NOT_FOUND,
+        message: MSG.ERROR.REFRESH_TOKEN_NOT_FOUND,
       });
     }
 
@@ -99,14 +102,12 @@ export class AuthController {
     return tokens;
   }
 
-  @Post('logout')
+  @Post(E.LOGOUT)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout and clear tokens' })
-  async logout(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const refreshToken = req.cookies?.[COOKIE_KEYS.REFRESH_TOKEN];
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const cookies = req.cookies as Record<string, string> | undefined;
+    const refreshToken = cookies?.[COOKIE_KEYS.REFRESH_TOKEN];
     if (refreshToken) {
       await this.authService.logout(refreshToken);
     }
@@ -114,12 +115,12 @@ export class AuthController {
     res.clearCookie(COOKIE_KEYS.ACCESS_TOKEN);
     res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, { path: '/auth/refresh' });
 
-    return { message: MSG.LOGOUT_SUCCESS };
+    return { message: MSG.SUCCESS.LOGOUT };
   }
 
-  @Get('me')
+  @Get(E.ME)
   @ApiOperation({ summary: 'Get current authenticated user' })
-  getMe(@CurrentUser() user: any) {
+  getMe(@CurrentUser() user: Record<string, unknown>) {
     return user;
   }
 }
