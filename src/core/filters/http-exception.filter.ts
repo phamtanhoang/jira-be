@@ -5,14 +5,24 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { MSG } from '@/core/constants';
+import {
+  TIMEZONE_HEADER,
+  convertDateToTimezone,
+  resolveTimezone,
+} from '@/core/utils';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
+    const request = ctx.getRequest<Request>();
     const response = ctx.getResponse<Response>();
+
+    const timezone = resolveTimezone(
+      request.headers[TIMEZONE_HEADER] as string | undefined,
+    );
 
     const status =
       exception instanceof HttpException
@@ -32,7 +42,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     response.status(status).json({
       statusCode: status,
       message: errorMessage,
-      timestamp: new Date().toISOString(),
+      timestamp: convertDateToTimezone(new Date(), timezone),
     });
   }
 }

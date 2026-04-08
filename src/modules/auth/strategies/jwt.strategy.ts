@@ -4,7 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { COOKIE_KEYS, ENV } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { AUTH_USER_SELECT, JwtPayload } from '@/core/types';
-import { cookieExtractor } from '@/core/utils/cookie.util';
+import { cookieExtractor } from '@/core/utils';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
