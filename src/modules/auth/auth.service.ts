@@ -7,7 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { hash, compare } from 'bcryptjs';
 import { randomInt, randomUUID } from 'crypto';
-import { MSG } from '@/core/constants';
+import { ENV, MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { MailService } from '@/core/mail/mail.service';
 import { RegisterDto, VerifyEmailDto, LoginDto } from './dto';
@@ -54,7 +54,7 @@ export class AuthService {
     });
 
     const otp = randomInt(100000, 999999).toString();
-    const verifyExpiry = parseInt(process.env.TOKEN_VERIFY_EXPIRY!);
+    const verifyExpiry = ENV.TOKEN_VERIFY_EXPIRY;
 
     await this.prisma.verificationToken.create({
       data: {
@@ -151,8 +151,8 @@ export class AuthService {
   }
 
   private async generateTokens(userId: string, email: string) {
-    const accessExpiry = parseInt(process.env.JWT_ACCESS_TOKEN_EXPIRATION!);
-    const refreshExpiry = parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRATION!);
+    const accessExpiry = ENV.JWT_ACCESS_TOKEN_EXPIRATION;
+    const refreshExpiry = ENV.JWT_REFRESH_TOKEN_EXPIRATION;
 
     const accessToken = this.jwt.sign(
       { sub: userId, email },

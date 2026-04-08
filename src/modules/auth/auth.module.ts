@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { ENV } from '@/core/constants';
 import { MailModule } from '@/core/mail/mail.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -10,9 +11,9 @@ import { JwtStrategy } from './strategies/jwt.strategy';
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
-      secret: process.env.JWT_SECRET!,
+      secret: ENV.JWT_SECRET,
       signOptions: {
-        expiresIn: parseInt(process.env.JWT_ACCESS_TOKEN_EXPIRATION!),
+        expiresIn: ENV.JWT_ACCESS_TOKEN_EXPIRATION,
       },
     }),
     MailModule,

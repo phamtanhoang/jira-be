@@ -1,0 +1,15 @@
+export const ENV = {
+  DATABASE_URL: process.env.DATABASE_URL!,
+  PORT: process.env.PORT!,
+  JWT_SECRET: process.env.JWT_SECRET!,
+  TOKEN_VERIFY_EXPIRY: parseInt(process.env.TOKEN_VERIFY_EXPIRY!),
+  JWT_ACCESS_TOKEN_EXPIRATION: parseInt(
+    process.env.JWT_ACCESS_TOKEN_EXPIRATION!,
+  ),
+  JWT_REFRESH_TOKEN_EXPIRATION: parseInt(
+    process.env.JWT_REFRESH_TOKEN_EXPIRATION!,
+  ),
+  CORS_ORIGIN: process.env.CORS_ORIGIN!,
+  NODE_ENV: process.env.NODE_ENV!,
+  RESEND_API_KEY: process.env.RESEND_API_KEY!,
+} as const;

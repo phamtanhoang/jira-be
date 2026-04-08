@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
 import { PrismaService } from '@/core/database/prisma.service';
-import { SETTING_KEYS } from '@/core/constants';
+import { ENV, SETTING_KEYS } from '@/core/constants';
 import { verifyEmailTemplate } from './templates/verify-email.template';
 
 interface AppInfo {
@@ -11,7 +11,7 @@ interface AppInfo {
 
 @Injectable()
 export class MailService {
-  private readonly resend = new Resend(process.env.RESEND_API_KEY);
+  private readonly resend = new Resend(ENV.RESEND_API_KEY);
   private readonly logger = new Logger(MailService.name);
 
   constructor(private prisma: PrismaService) {}
@@ -29,7 +29,7 @@ export class MailService {
 
   async sendVerificationEmail(email: string, otp: string): Promise<void> {
     const appInfo = await this.getAppInfo();
-    const expirySeconds = parseInt(process.env.TOKEN_VERIFY_EXPIRY!);
+    const expirySeconds = ENV.TOKEN_VERIFY_EXPIRY;
 
     try {
       await this.resend.emails.send({
