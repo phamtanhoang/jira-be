@@ -20,9 +20,13 @@ import {
 import { CurrentUser, Public } from '@/core/decorators';
 import { AuthUser } from '@/core/types';
 import { AuthService } from './auth.service';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
-import { VerifyEmailDto } from './dto/verify-email.dto';
+import {
+  ForgotPasswordDto,
+  LoginDto,
+  RegisterDto,
+  ResetPasswordDto,
+  VerifyEmailDto,
+} from './dto';
 
 const E = ENDPOINTS.AUTH;
 
@@ -117,6 +121,22 @@ export class AuthController {
     res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, { path: '/auth/refresh' });
 
     return { message: MSG.SUCCESS.LOGOUT };
+  }
+
+  @Public()
+  @Post(E.FORGOT_PASSWORD)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send reset password OTP' })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post(E.RESET_PASSWORD)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password with OTP' })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 
   @Get(E.ME)

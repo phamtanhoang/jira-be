@@ -1,4 +1,3 @@
-import { randomInt, randomUUID } from 'crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -6,11 +5,23 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { hash, compare } from 'bcryptjs';
 import { ENV, MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { MailService } from '@/core/mail/mail.service';
-import { RegisterDto, VerifyEmailDto, LoginDto } from './dto';
+import {
+  calculateExpiryDate,
+  generateOTP,
+  generateRefreshToken,
+  hashPassword,
+  validatePassword,
+} from '@/core/utils';
+import {
+  ForgotPasswordDto,
+  LoginDto,
+  RegisterDto,
+  ResetPasswordDto,
+  VerifyEmailDto,
+} from './dto';
 
 @Injectable()
 export class AuthService {
@@ -43,7 +54,7 @@ export class AuthService {
       await this.prisma.user.delete({ where: { id: existing.id } });
     }
 
-    const hashedPassword = await hash(dto.password, 12);
+    const hashedPassword = await hashPassword(dto.password);
 
     const user = await this.prisma.user.create({
       data: {
@@ -53,14 +64,13 @@ export class AuthService {
       },
     });
 
-    const otp = randomInt(100000, 999999).toString();
-    const verifyExpiry = ENV.TOKEN_VERIFY_EXPIRY;
+    const otp = generateOTP();
 
     await this.prisma.verificationToken.create({
       data: {
         userId: user.id,
         token: otp,
-        expires: new Date(Date.now() + verifyExpiry * 1000),
+        expires: calculateExpiryDate(ENV.TOKEN_VERIFY_EXPIRY),
       },
     });
 
@@ -109,7 +119,7 @@ export class AuthService {
       throw new UnauthorizedException(MSG.ERROR.INVALID_CREDENTIALS);
     }
 
-    const valid = await compare(dto.password, user.password);
+    const valid = await validatePassword(dto.password, user.password);
     if (!valid) throw new UnauthorizedException(MSG.ERROR.INVALID_CREDENTIALS);
 
     if (!user.emailVerified) {
@@ -144,6 +154,68 @@ export class AuthService {
     return tokens;
   }
 
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+    if (!user || !user.emailVerified) {
+      throw new BadRequestException(MSG.ERROR.USER_NOT_FOUND);
+    }
+
+    // Delete old tokens before creating new one
+    await this.prisma.verificationToken.deleteMany({
+      where: { userId: user.id },
+    });
+
+    const otp = generateOTP();
+
+    await this.prisma.verificationToken.create({
+      data: {
+        userId: user.id,
+        token: otp,
+        expires: calculateExpiryDate(ENV.TOKEN_VERIFY_EXPIRY),
+      },
+    });
+
+    await this.mail.sendResetPasswordEmail(dto.email, otp);
+
+    return { message: MSG.SUCCESS.FORGOT_PASSWORD };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+    if (!user) throw new BadRequestException(MSG.ERROR.USER_NOT_FOUND);
+
+    const record = await this.prisma.verificationToken.findFirst({
+      where: { userId: user.id, token: dto.token },
+    });
+
+    if (!record)
+      throw new BadRequestException(MSG.ERROR.INVALID_VERIFICATION_CODE);
+    if (record.expires < new Date()) {
+      await this.prisma.verificationToken.delete({
+        where: { id: record.id },
+      });
+      throw new BadRequestException(MSG.ERROR.VERIFICATION_CODE_EXPIRED);
+    }
+
+    const hashedPassword = await hashPassword(dto.newPassword);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { password: hashedPassword },
+      }),
+      this.prisma.verificationToken.deleteMany({
+        where: { userId: user.id },
+      }),
+    ]);
+
+    return { message: MSG.SUCCESS.RESET_PASSWORD };
+  }
+
   async logout(refreshToken: string) {
     await this.prisma.refreshToken.deleteMany({
       where: { token: refreshToken },
@@ -160,12 +232,12 @@ export class AuthService {
       { expiresIn: accessExpiry },
     );
 
-    const refreshTokenValue = randomUUID();
+    const refreshTokenValue = generateRefreshToken();
     await this.prisma.refreshToken.create({
       data: {
         token: refreshTokenValue,
         userId,
-        expiresAt: new Date(Date.now() + refreshExpiry * 1000),
+        expiresAt: calculateExpiryDate(refreshExpiry),
       },
     });
 

@@ -1,19 +1,23 @@
-interface VerifyEmailParams {
+export interface OtpEmailParams {
   appName: string;
   logoUrl: string;
   otp: string;
   expirySeconds: number;
+  title: string;
+  description: string;
 }
 
-export const verifyEmailTemplate = ({
+export const otpEmailTemplate = ({
   appName,
   logoUrl,
   otp,
-  expirySeconds: seconds,
-}: VerifyEmailParams): string => {
-  const minutes = Math.floor(seconds / 60);
+  expirySeconds,
+  title,
+  description,
+}: OtpEmailParams): string => {
+  const minutes = Math.floor(expirySeconds / 60);
   const expiryLabel =
-    minutes >= 1 ? `${minutes} minute(s)` : `${seconds} second(s)`;
+    minutes >= 1 ? `${minutes} minute(s)` : `${expirySeconds} second(s)`;
 
   return `
     <!DOCTYPE html>
@@ -37,9 +41,9 @@ export const verifyEmailTemplate = ({
               <!-- Body -->
               <tr>
                 <td style="padding: 40px;">
-                  <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 600; color: #172b4d;">Verify your email</h2>
+                  <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 600; color: #172b4d;">${title}</h2>
                   <p style="margin: 0 0 24px; font-size: 14px; color: #6b778c; line-height: 1.5;">
-                    Enter the code below to verify your email address.
+                    ${description}
                   </p>
                   <!-- OTP Code -->
                   <div style="background-color: #f4f5f7; border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 24px;">
