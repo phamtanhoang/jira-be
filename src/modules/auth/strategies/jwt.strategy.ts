@@ -1,14 +1,10 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { PrismaService } from '@/core/database/prisma.service';
 import { COOKIE_KEYS, ENV } from '@/core/constants';
+import { PrismaService } from '@/core/database/prisma.service';
+import { AUTH_USER_SELECT, JwtPayload } from '@/core/types';
 import { cookieExtractor } from '@/core/utils/cookie.util';
-
-interface JwtPayload {
-  sub: string;
-  email: string;
-}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -26,15 +22,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload) {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        emailVerified: true,
-        image: true,
-        role: true,
-        createdAt: true,
-      },
+      select: AUTH_USER_SELECT,
     });
     if (!user) throw new UnauthorizedException();
     return user;

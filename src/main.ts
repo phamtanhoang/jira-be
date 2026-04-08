@@ -1,12 +1,12 @@
 import 'dotenv/config';
-import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
-import { AppModule } from './app.module';
-import { AllExceptionsFilter } from '@/core/filters/http-exception.filter';
 import { ENV } from '@/core/constants';
+import { AllExceptionsFilter } from '@/core/filters/http-exception.filter';
+import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -49,4 +49,4 @@ async function bootstrap() {
   console.log(`Server running on http://localhost:${port}`);
   console.log(`Swagger docs: http://localhost:${port}/api`);
 }
-bootstrap();
+void bootstrap();

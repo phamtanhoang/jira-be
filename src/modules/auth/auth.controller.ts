@@ -10,7 +10,6 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import { CurrentUser, Public } from '@/core/decorators';
 import {
   COOKIE_KEYS,
   ENDPOINTS,
@@ -18,6 +17,8 @@ import {
   accessTokenCookieOptions,
   refreshTokenCookieOptions,
 } from '@/core/constants';
+import { CurrentUser, Public } from '@/core/decorators';
+import { AuthUser } from '@/core/types';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -120,7 +121,7 @@ export class AuthController {
 
   @Get(E.ME)
   @ApiOperation({ summary: 'Get current authenticated user' })
-  getMe(@CurrentUser() user: Record<string, unknown>) {
+  getMe(@CurrentUser() user: AuthUser) {
     return user;
   }
 }

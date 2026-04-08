@@ -1,3 +1,4 @@
 export const cookieExtractor = (cookieName: string) => {
-  return (req: any) => req?.cookies?.[cookieName] ?? null;
+  return (req: Record<string, Record<string, string>>): string | null =>
+    req?.cookies?.[cookieName] ?? null;
 };

@@ -1,3 +1,4 @@
+import { randomInt, randomUUID } from 'crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -6,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { hash, compare } from 'bcryptjs';
-import { randomInt, randomUUID } from 'crypto';
 import { ENV, MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { MailService } from '@/core/mail/mail.service';
@@ -79,7 +79,8 @@ export class AuthService {
       where: { userId: user.id, token: dto.token },
     });
 
-    if (!record) throw new BadRequestException(MSG.ERROR.INVALID_VERIFICATION_CODE);
+    if (!record)
+      throw new BadRequestException(MSG.ERROR.INVALID_VERIFICATION_CODE);
     if (record.expires < new Date()) {
       await this.prisma.verificationToken.delete({
         where: { id: record.id },

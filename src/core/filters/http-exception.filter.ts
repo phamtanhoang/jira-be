@@ -24,12 +24,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.getResponse()
         : MSG.ERROR.INTERNAL_SERVER_ERROR;
 
+    const errorMessage =
+      typeof message === 'string'
+        ? message
+        : ((message as { message?: string | string[] }).message ?? message);
+
     response.status(status).json({
       statusCode: status,
-      message:
-        typeof message === 'string'
-          ? message
-          : (message as Record<string, unknown>).message || message,
+      message: errorMessage,
       timestamp: new Date().toISOString(),
     });
   }

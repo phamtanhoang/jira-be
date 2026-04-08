@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
-import { PrismaService } from '@/core/database/prisma.service';
 import { ENV, SETTING_KEYS } from '@/core/constants';
+import { PrismaService } from '@/core/database/prisma.service';
 import { verifyEmailTemplate } from './templates/verify-email.template';
 
 interface AppInfo {
