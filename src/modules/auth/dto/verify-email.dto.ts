@@ -1,13 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, Length } from 'class-validator';
+import { IsNotEmpty, IsString, Length, Matches } from 'class-validator';
+import { REGEX } from '@/core/constants';
 
 export class VerifyEmailDto {
   @ApiProperty({ example: 'john@example.com' })
-  @IsEmail()
+  @IsString()
+  @IsNotEmpty()
+  @Matches(REGEX.EMAIL)
   email!: string;
 
   @ApiProperty({ example: '123456', description: '6-digit OTP code' })
   @IsString()
+  @IsNotEmpty()
   @Length(6, 6)
   token!: string;
 }

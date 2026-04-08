@@ -10,9 +10,7 @@ import { randomInt, randomUUID } from 'crypto';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { MailService } from '@/core/mail/mail.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { VerifyEmailDto } from './dto/verify-email.dto';
+import { RegisterDto, VerifyEmailDto, LoginDto } from './dto';
 
 @Injectable()
 export class AuthService {
