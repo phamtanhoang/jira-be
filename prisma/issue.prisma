@@ -1,0 +1,66 @@
+model Issue {
+  id            String        @id @default(uuid())
+  key           String        @unique
+  projectId     String
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type          IssueType     @default(TASK)
+  summary       String
+  description   String?
+  priority      IssuePriority @default(MEDIUM)
+  reporterId    String
+  reporter      User          @relation("IssueReporter", fields: [reporterId], references: [id])
+  assigneeId    String?
+  assignee      User?         @relation("IssueAssignee", fields: [assigneeId], references: [id])
+  parentId      String?
+  parent        Issue?        @relation("IssueSubtasks", fields: [parentId], references: [id])
+  children      Issue[]       @relation("IssueSubtasks")
+  epicId        String?
+  epic          Issue?        @relation("EpicIssues", fields: [epicId], references: [id])
+  epicChildren  Issue[]       @relation("EpicIssues")
+  sprintId      String?
+  sprint        Sprint?       @relation(fields: [sprintId], references: [id])
+  boardColumnId String?
+  boardColumn   BoardColumn?  @relation(fields: [boardColumnId], references: [id])
+  position      Int           @default(0)
+  storyPoints   Int?
+  dueDate       DateTime?
+  startDate     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  labels      IssueLabel[]
+  comments    Comment[]
+  attachments Attachment[]
+  worklogs    Worklog[]
+  activities  Activity[]
+
+  @@index([projectId])
+  @@index([assigneeId])
+  @@index([sprintId])
+  @@index([boardColumnId])
+  @@index([epicId])
+}
+
+model Label {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  color     String   @default("#6b778c")
+  createdAt DateTime @default(now())
+
+  issues IssueLabel[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+}
+
+model IssueLabel {
+  issueId String
+  issue   Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  labelId String
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, labelId])
+}

@@ -2,3 +2,66 @@ enum Role {
   USER
   ADMIN
 }
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum ProjectRole {
+  LEAD
+  ADMIN
+  DEVELOPER
+  VIEWER
+}
+
+enum ProjectType {
+  SCRUM
+  KANBAN
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum SprintStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
+  CLOSED
+}
+
+enum StatusCategory {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum IssueType {
+  EPIC
+  STORY
+  BUG
+  TASK
+  SUBTASK
+}
+
+enum IssuePriority {
+  LOWEST
+  LOW
+  MEDIUM
+  HIGH
+  HIGHEST
+}
+
+enum ActivityAction {
+  CREATED
+  UPDATED
+  COMMENTED
+  ASSIGNED
+  TRANSITIONED
+  ATTACHED
+  LOGGED_WORK
+}

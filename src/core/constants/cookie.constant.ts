@@ -20,6 +20,6 @@ export const accessTokenCookieOptions = (maxAge: number) => ({
 
 export const refreshTokenCookieOptions = () => ({
   ...BASE_OPTIONS,
-  path: '/auth/refresh',
+  path: '/',
   maxAge: ENV.JWT_REFRESH_TOKEN_EXPIRATION * 1000,
 });

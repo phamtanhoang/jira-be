@@ -76,7 +76,11 @@ export class AuthService {
 
     await this.mail.sendVerificationEmail(dto.email, otp);
 
-    return { message: MSG.SUCCESS.REGISTER, userId: user.id };
+    return {
+      message: MSG.SUCCESS.REGISTER,
+      userId: user.id,
+      otpExpiresIn: ENV.TOKEN_VERIFY_EXPIRY,
+    };
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
@@ -179,7 +183,10 @@ export class AuthService {
 
     await this.mail.sendResetPasswordEmail(dto.email, otp);
 
-    return { message: MSG.SUCCESS.FORGOT_PASSWORD };
+    return {
+      message: MSG.SUCCESS.FORGOT_PASSWORD,
+      otpExpiresIn: ENV.TOKEN_VERIFY_EXPIRY,
+    };
   }
 
   async resetPassword(dto: ResetPasswordDto) {

@@ -15,4 +15,57 @@ export const ENDPOINTS = {
     APP_INFO: 'app-info',
     BY_KEY: ':key',
   },
+  WORKSPACES: {
+    BASE: 'workspaces',
+    BY_ID: ':id',
+    MEMBERS: 'members',
+    MEMBER_BY_ID: 'members/:memberId',
+  },
+  PROJECTS: {
+    BASE: 'projects',
+    BY_ID: ':id',
+    MEMBERS: 'members',
+    MEMBER_BY_ID: 'members/:memberId',
+  },
+  BOARDS: {
+    BASE: 'boards',
+    BY_PROJECT: 'project/:projectId',
+    COLUMNS: ':boardId/columns',
+    COLUMN_BY_ID: ':boardId/columns/:columnId',
+    REORDER_COLUMNS: ':boardId/columns/reorder',
+  },
+  SPRINTS: {
+    BASE: 'sprints',
+    BY_ID: ':id',
+    START: ':id/start',
+    COMPLETE: ':id/complete',
+  },
+  ISSUES: {
+    BASE: 'issues',
+    BY_ID: ':id',
+    BY_KEY: 'key/:key',
+    MOVE: ':id/move',
+    LABELS: ':id/labels',
+    LABEL_BY_ID: ':id/labels/:labelId',
+    COMMENTS: ':id/comments',
+    ATTACHMENTS: ':id/attachments',
+    WORKLOGS: ':id/worklogs',
+    ACTIVITY: ':id/activity',
+  },
+  LABELS: {
+    BASE: 'labels',
+    BY_ID: ':id',
+  },
+  COMMENTS: {
+    BASE: 'comments',
+    BY_ID: ':id',
+  },
+  ATTACHMENTS: {
+    BASE: 'attachments',
+    BY_ID: ':id',
+  },
+  WORKLOGS: {
+    BASE: 'worklogs',
+    BY_ID: ':id',
+  },
 } as const;

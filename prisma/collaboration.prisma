@@ -1,0 +1,60 @@
+model Comment {
+  id        String    @id @default(uuid())
+  issueId   String
+  issue     Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User      @relation("CommentAuthor", fields: [authorId], references: [id])
+  content   String
+  parentId  String?
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([issueId])
+}
+
+model Attachment {
+  id           String   @id @default(uuid())
+  issueId      String
+  issue        Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  uploadedById String
+  uploadedBy   User     @relation("AttachmentUploader", fields: [uploadedById], references: [id])
+  fileName     String
+  fileUrl      String
+  fileSize     Int
+  mimeType     String
+  createdAt    DateTime @default(now())
+
+  @@index([issueId])
+}
+
+model Worklog {
+  id          String   @id @default(uuid())
+  issueId     String
+  issue       Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation("WorklogUser", fields: [userId], references: [id])
+  timeSpent   Int
+  description String?
+  startedAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([issueId])
+}
+
+model Activity {
+  id        String         @id @default(uuid())
+  issueId   String
+  issue     Issue          @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User           @relation("ActivityUser", fields: [userId], references: [id])
+  action    ActivityAction
+  field     String?
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime       @default(now())
+
+  @@index([issueId])
+}

@@ -118,7 +118,7 @@ export class AuthController {
     }
 
     res.clearCookie(COOKIE_KEYS.ACCESS_TOKEN);
-    res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, { path: '/auth/refresh' });
+    res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, { path: '/' });
 
     return { message: MSG.SUCCESS.LOGOUT };
   }

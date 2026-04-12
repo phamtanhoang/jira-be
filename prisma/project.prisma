@@ -1,0 +1,40 @@
+model Project {
+  id                String      @id @default(uuid())
+  name              String
+  key               String
+  description       String?
+  coverUrl          String?
+  workspaceId       String
+  workspace         Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leadId            String
+  lead              User        @relation("ProjectLead", fields: [leadId], references: [id])
+  defaultAssigneeId String?
+  defaultAssignee   User?       @relation("ProjectDefaultAssignee", fields: [defaultAssigneeId], references: [id])
+  type              ProjectType @default(SCRUM)
+  visibility        Visibility  @default(PRIVATE)
+  issueCounter      Int         @default(0)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  members ProjectMember[]
+  board   Board?
+  issues  Issue[]
+  labels  Label[]
+
+  @@unique([workspaceId, key])
+  @@index([workspaceId])
+  @@index([leadId])
+}
+
+model ProjectMember {
+  id        String      @id @default(uuid())
+  projectId String
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      ProjectRole @default(DEVELOPER)
+  joinedAt  DateTime    @default(now())
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
