@@ -30,3 +30,8 @@ coverage/
 # Prisma
 prisma/*.db
 prisma/*.db-journal
+
+# Claude Code (private)
+.claude/CLAUDE.local.md
+.claude/settings.local.json
+.claude/memory.md

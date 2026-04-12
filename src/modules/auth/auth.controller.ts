@@ -10,6 +10,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import {
   COOKIE_KEYS,
@@ -38,6 +39,7 @@ export class AuthController {
 
   @Public()
   @Post(E.REGISTER)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Register a new user' })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
@@ -54,6 +56,7 @@ export class AuthController {
   @Public()
   @Post(E.LOGIN)
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Login and receive JWT tokens' })
   async login(
     @Body() dto: LoginDto,
@@ -124,6 +127,7 @@ export class AuthController {
   @Public()
   @Post(E.FORGOT_PASSWORD)
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 3 } })
   @ApiOperation({ summary: 'Send reset password OTP' })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);

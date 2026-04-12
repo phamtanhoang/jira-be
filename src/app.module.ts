@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from '@/core/database/prisma.module';
 import { JwtAuthGuard, RolesGuard } from '@/core/guards';
 import { TimezoneInterceptor } from '@/core/interceptors';
@@ -16,6 +17,7 @@ import { WorklogsModule } from '@/modules/worklogs/worklogs.module';
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 10 }]),
     PrismaModule,
     AuthModule,
     SettingsModule,
@@ -36,6 +38,10 @@ import { WorklogsModule } from '@/modules/worklogs/worklogs.module';
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
     {
       provide: APP_INTERCEPTOR,
