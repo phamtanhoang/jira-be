@@ -56,5 +56,10 @@ export class UpdateIssueDto {
   @ApiPropertyOptional()
   @IsDateString()
   @IsOptional()
+  startDate?: string | null;
+
+  @ApiPropertyOptional()
+  @IsDateString()
+  @IsOptional()
   dueDate?: string | null;
 }

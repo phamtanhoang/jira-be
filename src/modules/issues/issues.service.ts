@@ -162,7 +162,7 @@ export class IssuesService {
     for (const [field, value] of Object.entries(dto)) {
       if (value === undefined) continue;
       const oldVal = (issue as Record<string, unknown>)[field];
-      if (field === 'dueDate') {
+      if (field === 'dueDate' || field === 'startDate') {
         data[field] = value ? new Date(value as string) : null;
       } else {
         data[field] = value;
