@@ -115,6 +115,43 @@ export class SprintsService {
     return this.prisma.sprint.delete({ where: { id: sprint.id } });
   }
 
+  async getBurndown(sprintId: string, userId: string) {
+    const sprint = await this.findById(sprintId, userId);
+    if (!sprint.startDate) return { totalPoints: 0, days: [] };
+
+    const startDate = new Date(sprint.startDate);
+    const endDate = sprint.endDate ? new Date(sprint.endDate) : new Date();
+
+    // All issues in this sprint
+    const issues = sprint.issues;
+    const totalPoints = issues.reduce((sum, i) => sum + (i.storyPoints ?? 1), 0);
+
+    // Build daily burndown
+    const totalDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / 86400000));
+    const pointsPerDay = totalPoints / totalDays;
+
+    const days: { date: string; ideal: number; actual: number }[] = [];
+
+    for (let d = 0; d <= totalDays; d++) {
+      const currentDate = new Date(startDate);
+      currentDate.setDate(currentDate.getDate() + d);
+      const dateStr = currentDate.toISOString().slice(0, 10);
+
+      // Count points completed by this date (issues with completedAt <= currentDate)
+      const donePoints = issues
+        .filter((i) => i.completedAt && new Date(i.completedAt).toISOString().slice(0, 10) <= dateStr)
+        .reduce((sum, i) => sum + (i.storyPoints ?? 1), 0);
+
+      days.push({
+        date: dateStr,
+        ideal: Math.max(0, Math.round((totalPoints - pointsPerDay * d) * 10) / 10),
+        actual: totalPoints - donePoints,
+      });
+    }
+
+    return { totalPoints, days };
+  }
+
   // ─── Helpers ──────────────────────────────────────────
 
   private async assertBoardAccess(boardId: string, userId: string) {

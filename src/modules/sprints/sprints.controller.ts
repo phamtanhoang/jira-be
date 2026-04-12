@@ -51,6 +51,12 @@ export class SprintsController {
     return { message: MSG.SUCCESS.SPRINT_COMPLETED, sprint };
   }
 
+  @Get(E.BURNDOWN)
+  @ApiOperation({ summary: 'Get sprint burndown chart data' })
+  getBurndown(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.sprintsService.getBurndown(id, user.id);
+  }
+
   @Delete(E.BY_ID)
   @ApiOperation({ summary: 'Delete sprint' })
   async delete(@Param('id') id: string, @CurrentUser() user: AuthUser) {

@@ -39,6 +39,7 @@ export const ENDPOINTS = {
     BY_ID: ':id',
     START: ':id/start',
     COMPLETE: ':id/complete',
+    BURNDOWN: ':id/burndown',
   },
   ISSUES: {
     BASE: 'issues',
