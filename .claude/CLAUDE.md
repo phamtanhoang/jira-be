@@ -78,3 +78,8 @@ src/
 - Workspace owner CANNOT be removed — no transfer endpoint exists
 - New issues auto-assign to first board column (position 0). If no columns exist, boardColumnId is null
 - Sprint complete moves all non-DONE issues to backlog (sprintId = null)
+- Description + comment content now contain HTML (from Tiptap editor on FE) — same DB fields, no schema change
+- GET /issues?search= is used by FE global search (Cmd+K) — works without projectId filter
+- PATCH /issues/:id with { sprintId } used by FE backlog DnD to assign/unassign sprints
+- PATCH /issues/:id/move used by FE subtask checkbox to toggle Done/Todo columns
+- PATCH /worklogs/:id used by FE inline worklog edit
