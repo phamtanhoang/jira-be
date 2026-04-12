@@ -7,6 +7,7 @@ import {
   Post,
   Req,
   Res,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -85,10 +86,7 @@ export class AuthController {
     const cookies = req.cookies as Record<string, string> | undefined;
     const refreshToken = cookies?.[COOKIE_KEYS.REFRESH_TOKEN];
     if (!refreshToken) {
-      return res.status(HttpStatus.UNAUTHORIZED).json({
-        statusCode: HttpStatus.UNAUTHORIZED,
-        message: MSG.ERROR.REFRESH_TOKEN_NOT_FOUND,
-      });
+      throw new UnauthorizedException(MSG.ERROR.REFRESH_TOKEN_NOT_FOUND);
     }
 
     const tokens = await this.authService.refresh(refreshToken);

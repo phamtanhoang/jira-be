@@ -1,10 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ActivityAction } from '@prisma/client';
-import { MSG } from '@/core/constants';
+import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { CreateWorklogDto, UpdateWorklogDto } from './dto';
-
-const USER_SELECT = { id: true, name: true, image: true };
 
 @Injectable()
 export class WorklogsService {
@@ -22,7 +20,7 @@ export class WorklogsService {
         startedAt: new Date(dto.startedAt),
         description: dto.description,
       },
-      include: { user: { select: USER_SELECT } },
+      include: { user: USER_SELECT_BASIC },
     });
 
     await this.prisma.activity.create({
@@ -40,7 +38,7 @@ export class WorklogsService {
   async findByIssue(issueId: string) {
     return this.prisma.worklog.findMany({
       where: { issueId },
-      include: { user: { select: USER_SELECT } },
+      include: { user: USER_SELECT_BASIC },
       orderBy: { startedAt: 'desc' },
     });
   }
@@ -57,7 +55,7 @@ export class WorklogsService {
         ...(dto.startedAt !== undefined && { startedAt: new Date(dto.startedAt) }),
         ...(dto.description !== undefined && { description: dto.description }),
       },
-      include: { user: { select: USER_SELECT } },
+      include: { user: USER_SELECT_BASIC },
     });
   }
 

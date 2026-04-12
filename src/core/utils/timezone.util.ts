@@ -16,6 +16,18 @@ export function resolveTimezone(headerValue: string | undefined): string {
     : DEFAULT_TIMEZONE;
 }
 
+/**
+ * Converts a Date to an ISO-8601 string in the given timezone.
+ *
+ * Why Intl.DateTimeFormat.formatToParts?
+ *   Node.js has no built-in way to produce an ISO string in an arbitrary
+ *   timezone. We use formatToParts to extract year/month/day/hour/min/sec
+ *   in the target timezone, then compute the UTC offset by comparing the
+ *   formatted local time back to the original UTC time.
+ *
+ * The hour === '24' check handles the edge case where some locales
+ * represent midnight as 24:00 instead of 00:00.
+ */
 export function convertDateToTimezone(date: Date, timezone: string): string {
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,

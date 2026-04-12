@@ -5,13 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ProjectRole } from '@prisma/client';
-import { MSG } from '@/core/constants';
+import { MSG, USER_SELECT_FULL } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import { BoardsService } from '@/modules/boards/boards.service';
 import { AddProjectMemberDto, CreateProjectDto, UpdateProjectDto } from './dto';
-
-const USER_SELECT = { id: true, name: true, email: true, image: true };
 
 @Injectable()
 export class ProjectsService {
@@ -43,8 +41,8 @@ export class ProjectsService {
         },
       },
       include: {
-        lead: { select: USER_SELECT },
-        members: { include: { user: { select: USER_SELECT } } },
+        lead: USER_SELECT_FULL,
+        members: { include: { user: USER_SELECT_FULL } },
       },
     });
 
@@ -60,7 +58,7 @@ export class ProjectsService {
     return this.prisma.project.findMany({
       where: { workspaceId },
       include: {
-        lead: { select: USER_SELECT },
+        lead: USER_SELECT_FULL,
         _count: { select: { members: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -71,9 +69,9 @@ export class ProjectsService {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
       include: {
-        lead: { select: USER_SELECT },
+        lead: USER_SELECT_FULL,
         members: {
-          include: { user: { select: USER_SELECT } },
+          include: { user: USER_SELECT_FULL },
           orderBy: { joinedAt: 'asc' },
         },
       },
@@ -128,7 +126,7 @@ export class ProjectsService {
         userId: dto.userId,
         role: dto.role ?? ProjectRole.DEVELOPER,
       },
-      include: { user: { select: USER_SELECT } },
+      include: { user: USER_SELECT_FULL },
     });
   }
 

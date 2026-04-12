@@ -1,10 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ActivityAction } from '@prisma/client';
-import { MSG } from '@/core/constants';
+import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { CreateCommentDto, UpdateCommentDto } from './dto';
-
-const AUTHOR_SELECT = { id: true, name: true, image: true };
 
 @Injectable()
 export class CommentsService {
@@ -22,8 +20,8 @@ export class CommentsService {
         parentId: dto.parentId,
       },
       include: {
-        author: { select: AUTHOR_SELECT },
-        replies: { include: { author: { select: AUTHOR_SELECT } } },
+        author: USER_SELECT_BASIC,
+        replies: { include: { author: USER_SELECT_BASIC } },
       },
     });
 
@@ -42,9 +40,9 @@ export class CommentsService {
     return this.prisma.comment.findMany({
       where: { issueId, parentId: null },
       include: {
-        author: { select: AUTHOR_SELECT },
+        author: USER_SELECT_BASIC,
         replies: {
-          include: { author: { select: AUTHOR_SELECT } },
+          include: { author: USER_SELECT_BASIC },
           orderBy: { createdAt: 'asc' },
         },
       },
@@ -60,7 +58,7 @@ export class CommentsService {
     return this.prisma.comment.update({
       where: { id: commentId },
       data: { content: dto.content },
-      include: { author: { select: AUTHOR_SELECT } },
+      include: { author: USER_SELECT_BASIC },
     });
   }
 

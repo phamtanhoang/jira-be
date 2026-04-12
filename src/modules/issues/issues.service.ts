@@ -1,14 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ActivityAction, StatusCategory } from '@prisma/client';
-import { MSG } from '@/core/constants';
+import { ActivityAction, IssueType, IssuePriority, Prisma, StatusCategory } from '@prisma/client';
+
+const ACTIVITY_LIMIT = 20;
+import { MSG, USER_SELECT_BASIC, BOARD_COLUMN_SELECT } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import { CreateIssueDto, UpdateIssueDto, MoveIssueDto } from './dto';
 
 const ISSUE_INCLUDE = {
-  reporter: { select: { id: true, name: true, image: true } },
-  assignee: { select: { id: true, name: true, image: true } },
-  boardColumn: { select: { id: true, name: true, category: true } },
+  reporter: USER_SELECT_BASIC,
+  assignee: USER_SELECT_BASIC,
+  boardColumn: BOARD_COLUMN_SELECT,
   sprint: { select: { id: true, name: true, status: true } },
   parent: { select: { id: true, key: true, summary: true } },
   epic: { select: { id: true, key: true, summary: true } },
@@ -32,46 +34,47 @@ export class IssuesService {
 
     await this.workspacesService.assertMember(project.workspaceId, userId);
 
-    // Generate issue key atomically
-    const updated = await this.prisma.project.update({
-      where: { id: project.id },
-      data: { issueCounter: { increment: 1 } },
-    });
-    const key = `${project.key}-${updated.issueCounter}`;
-
     // Default to first column (To Do)
     const firstColumnId = project.board?.columns[0]?.id;
 
-    const issue = await this.prisma.issue.create({
-      data: {
-        key,
-        projectId: project.id,
-        summary: dto.summary,
-        description: dto.description,
-        type: dto.type,
-        priority: dto.priority,
-        reporterId: userId,
-        assigneeId: dto.assigneeId,
-        parentId: dto.parentId,
-        epicId: dto.epicId,
-        sprintId: dto.sprintId,
-        boardColumnId: firstColumnId,
-        storyPoints: dto.storyPoints,
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
-      },
-      include: ISSUE_INCLUDE,
-    });
+    // Wrap in transaction: counter increment + issue create + activity log
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.project.update({
+        where: { id: project.id },
+        data: { issueCounter: { increment: 1 } },
+      });
+      const key = `${project.key}-${updated.issueCounter}`;
 
-    // Log activity
-    await this.prisma.activity.create({
-      data: {
-        issueId: issue.id,
-        userId,
-        action: ActivityAction.CREATED,
-      },
-    });
+      const issue = await tx.issue.create({
+        data: {
+          key,
+          projectId: project.id,
+          summary: dto.summary,
+          description: dto.description,
+          type: dto.type,
+          priority: dto.priority,
+          reporterId: userId,
+          assigneeId: dto.assigneeId,
+          parentId: dto.parentId,
+          epicId: dto.epicId,
+          sprintId: dto.sprintId,
+          boardColumnId: firstColumnId,
+          storyPoints: dto.storyPoints,
+          dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+        },
+        include: ISSUE_INCLUDE,
+      });
 
-    return issue;
+      await tx.activity.create({
+        data: {
+          issueId: issue.id,
+          userId,
+          action: ActivityAction.CREATED,
+        },
+      });
+
+      return issue;
+    });
   }
 
   async findAll(projectId: string, userId: string, filters?: {
@@ -92,12 +95,12 @@ export class IssuesService {
         ...(filters?.sprintId && { sprintId: filters.sprintId }),
         ...(filters?.sprintId === 'backlog' && { sprintId: null }),
         ...(filters?.assigneeId && { assigneeId: filters.assigneeId }),
-        ...(filters?.type && { type: filters.type as any }),
-        ...(filters?.priority && { priority: filters.priority as any }),
+        ...(filters?.type && { type: filters.type as IssueType }),
+        ...(filters?.priority && { priority: filters.priority as IssuePriority }),
         ...(filters?.search && {
           OR: [
-            { summary: { contains: filters.search, mode: 'insensitive' as any } },
-            { key: { contains: filters.search, mode: 'insensitive' as any } },
+            { summary: { contains: filters.search, mode: Prisma.QueryMode.insensitive } },
+            { key: { contains: filters.search, mode: Prisma.QueryMode.insensitive } },
           ],
         }),
       },
@@ -113,19 +116,19 @@ export class IssuesService {
         ...ISSUE_INCLUDE,
         children: {
           include: {
-            assignee: { select: { id: true, name: true, image: true } },
-            boardColumn: { select: { id: true, name: true, category: true } },
+            assignee: USER_SELECT_BASIC,
+            boardColumn: BOARD_COLUMN_SELECT,
           },
           orderBy: { createdAt: 'asc' },
         },
         comments: {
-          include: { author: { select: { id: true, name: true, image: true } } },
+          include: { author: USER_SELECT_BASIC },
           orderBy: { createdAt: 'asc' },
         },
         activities: {
-          include: { user: { select: { id: true, name: true, image: true } } },
+          include: { user: USER_SELECT_BASIC },
           orderBy: { createdAt: 'desc' },
-          take: 20,
+          take: ACTIVITY_LIMIT,
         },
       },
     });
@@ -158,7 +161,7 @@ export class IssuesService {
 
     for (const [field, value] of Object.entries(dto)) {
       if (value === undefined) continue;
-      const oldVal = (issue as any)[field];
+      const oldVal = (issue as Record<string, unknown>)[field];
       if (field === 'dueDate') {
         data[field] = value ? new Date(value as string) : null;
       } else {
