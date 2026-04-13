@@ -30,7 +30,7 @@ export class IssuesController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List/filter issues by project' })
+  @ApiOperation({ summary: 'List/filter issues by project. Add take & cursor for pagination.' })
   findAll(
     @Query('projectId') projectId: string,
     @Query('sprintId') sprintId: string,
@@ -38,6 +38,8 @@ export class IssuesController {
     @Query('type') type: string,
     @Query('priority') priority: string,
     @Query('search') search: string,
+    @Query('cursor') cursor: string,
+    @Query('take') take: string,
     @CurrentUser() user: AuthUser,
   ) {
     return this.issuesService.findAll(projectId, user.id, {
@@ -46,6 +48,8 @@ export class IssuesController {
       type,
       priority,
       search,
+      cursor,
+      take: take ? parseInt(take) : undefined,
     });
   }
 

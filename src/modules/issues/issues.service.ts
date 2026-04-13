@@ -83,30 +83,57 @@ export class IssuesService {
     type?: string;
     priority?: string;
     search?: string;
+    cursor?: string;
+    take?: number;
   }) {
     const project = await this.prisma.project.findUnique({ where: { id: projectId } });
     if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
 
     await this.workspacesService.assertMember(project.workspaceId, userId);
 
-    return this.prisma.issue.findMany({
-      where: {
-        projectId,
-        ...(filters?.sprintId && { sprintId: filters.sprintId }),
-        ...(filters?.sprintId === 'backlog' && { sprintId: null }),
-        ...(filters?.assigneeId && { assigneeId: filters.assigneeId }),
-        ...(filters?.type && { type: filters.type as IssueType }),
-        ...(filters?.priority && { priority: filters.priority as IssuePriority }),
-        ...(filters?.search && {
-          OR: [
-            { summary: { contains: filters.search, mode: Prisma.QueryMode.insensitive } },
-            { key: { contains: filters.search, mode: Prisma.QueryMode.insensitive } },
-          ],
-        }),
-      },
+    const where = {
+      projectId,
+      ...(filters?.sprintId && filters.sprintId !== 'backlog' && { sprintId: filters.sprintId }),
+      ...(filters?.sprintId === 'backlog' && { sprintId: null }),
+      ...(filters?.assigneeId && { assigneeId: filters.assigneeId }),
+      ...(filters?.type && { type: filters.type as IssueType }),
+      ...(filters?.priority && { priority: filters.priority as IssuePriority }),
+      ...(filters?.search && {
+        OR: [
+          { summary: { contains: filters.search, mode: Prisma.QueryMode.insensitive } },
+          { key: { contains: filters.search, mode: Prisma.QueryMode.insensitive } },
+        ],
+      }),
+    };
+
+    const take = filters?.take ?? 0; // 0 = no limit (backward compatible)
+
+    // No pagination — return all (for board view, backlog DnD, etc.)
+    if (!take) {
+      return this.prisma.issue.findMany({
+        where,
+        include: ISSUE_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    // Cursor-based pagination
+    const items = await this.prisma.issue.findMany({
+      where,
       include: ISSUE_INCLUDE,
       orderBy: { createdAt: 'desc' },
+      take: take + 1, // Fetch 1 extra to check if there are more
+      ...(filters?.cursor && {
+        cursor: { id: filters.cursor },
+        skip: 1, // Skip the cursor item itself
+      }),
     });
+
+    const hasMore = items.length > take;
+    const data = hasMore ? items.slice(0, take) : items;
+    const nextCursor = hasMore ? data[data.length - 1].id : null;
+
+    return { data, nextCursor, hasMore };
   }
 
   async findByKey(key: string, userId: string) {
