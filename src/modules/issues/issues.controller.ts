@@ -59,6 +59,12 @@ export class IssuesController {
     return this.issuesService.findByKey(key, user.id);
   }
 
+  @Get(E.ACTIVITY)
+  @ApiOperation({ summary: 'Get activity log for issue' })
+  findActivity(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.issuesService.findActivity(id, user.id);
+  }
+
   @Get(E.BY_ID)
   @ApiOperation({ summary: 'Get issue by ID' })
   findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {

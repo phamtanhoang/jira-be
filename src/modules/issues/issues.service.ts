@@ -268,6 +268,19 @@ export class IssuesService {
     return this.prisma.issue.delete({ where: { id: issueId } });
   }
 
+  // ─── Activity ─────────────────────────────────────────
+
+  async findActivity(issueId: string, userId: string) {
+    await this.findById(issueId, userId);
+
+    return this.prisma.activity.findMany({
+      where: { issueId },
+      include: { user: USER_SELECT_BASIC },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+  }
+
   // ─── Bulk Operations ──────────────────────────────────
 
   async bulkUpdate(
