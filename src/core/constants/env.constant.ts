@@ -12,4 +12,7 @@ export const ENV = {
   CORS_ORIGIN: process.env.CORS_ORIGIN!,
   NODE_ENV: process.env.NODE_ENV!,
   RESEND_API_KEY: process.env.RESEND_API_KEY!,
+  SUPABASE_URL: process.env.SUPABASE_URL!,
+  SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY!,
+  SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET!,
 } as const;

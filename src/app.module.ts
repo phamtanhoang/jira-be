@@ -14,6 +14,7 @@ import { IssuesModule } from '@/modules/issues/issues.module';
 import { LabelsModule } from '@/modules/labels/labels.module';
 import { CommentsModule } from '@/modules/comments/comments.module';
 import { WorklogsModule } from '@/modules/worklogs/worklogs.module';
+import { AttachmentsModule } from '@/modules/attachments/attachments.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { WorklogsModule } from '@/modules/worklogs/worklogs.module';
     LabelsModule,
     CommentsModule,
     WorklogsModule,
+    AttachmentsModule,
   ],
   providers: [
     {
