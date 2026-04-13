@@ -275,7 +275,7 @@ export class IssuesService {
     dto: { issueIds: string[]; sprintId?: string | null; assigneeId?: string | null; priority?: string },
   ) {
     // Verify access for first issue (all should be in same project)
-    const firstIssue = await this.findById(dto.issueIds[0], userId);
+    await this.findById(dto.issueIds[0], userId);
 
     const data: Record<string, unknown> = {};
     if (dto.sprintId !== undefined) data.sprintId = dto.sprintId;
