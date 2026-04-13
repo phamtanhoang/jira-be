@@ -12,7 +12,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ENDPOINTS, MSG } from '@/core/constants';
 import { CurrentUser } from '@/core/decorators';
 import { AuthUser } from '@/core/types';
-import { CreateIssueDto, UpdateIssueDto, MoveIssueDto } from './dto';
+import { CreateIssueDto, UpdateIssueDto, MoveIssueDto, BulkUpdateIssueDto, BulkDeleteIssueDto } from './dto';
 import { IssuesService } from './issues.service';
 
 const E = ENDPOINTS.ISSUES;
@@ -81,6 +81,20 @@ export class IssuesController {
   ) {
     const issue = await this.issuesService.move(id, user.id, dto);
     return { message: MSG.SUCCESS.ISSUE_MOVED, issue };
+  }
+
+  @Patch(E.BULK_UPDATE)
+  @ApiOperation({ summary: 'Bulk update issues (sprint, assignee, priority)' })
+  async bulkUpdate(@CurrentUser() user: AuthUser, @Body() dto: BulkUpdateIssueDto) {
+    const result = await this.issuesService.bulkUpdate(user.id, dto);
+    return { message: MSG.SUCCESS.ISSUE_UPDATED, ...result };
+  }
+
+  @Delete(E.BULK_DELETE)
+  @ApiOperation({ summary: 'Bulk delete issues' })
+  async bulkDelete(@CurrentUser() user: AuthUser, @Body() dto: BulkDeleteIssueDto) {
+    const result = await this.issuesService.bulkDelete(user.id, dto.issueIds);
+    return { message: MSG.SUCCESS.ISSUE_DELETED, ...result };
   }
 
   @Delete(E.BY_ID)

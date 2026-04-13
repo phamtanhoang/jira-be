@@ -241,6 +241,39 @@ export class IssuesService {
     return this.prisma.issue.delete({ where: { id: issueId } });
   }
 
+  // ─── Bulk Operations ──────────────────────────────────
+
+  async bulkUpdate(
+    userId: string,
+    dto: { issueIds: string[]; sprintId?: string | null; assigneeId?: string | null; priority?: string },
+  ) {
+    // Verify access for first issue (all should be in same project)
+    const firstIssue = await this.findById(dto.issueIds[0], userId);
+
+    const data: Record<string, unknown> = {};
+    if (dto.sprintId !== undefined) data.sprintId = dto.sprintId;
+    if (dto.assigneeId !== undefined) data.assigneeId = dto.assigneeId;
+    if (dto.priority !== undefined) data.priority = dto.priority;
+
+    const result = await this.prisma.issue.updateMany({
+      where: { id: { in: dto.issueIds } },
+      data,
+    });
+
+    return { count: result.count };
+  }
+
+  async bulkDelete(userId: string, issueIds: string[]) {
+    // Verify access
+    await this.findById(issueIds[0], userId);
+
+    const result = await this.prisma.issue.deleteMany({
+      where: { id: { in: issueIds } },
+    });
+
+    return { count: result.count };
+  }
+
   // ─── Labels ───────────────────────────────────────────
 
   async addLabel(issueId: string, labelId: string, userId: string) {

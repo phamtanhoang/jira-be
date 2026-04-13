@@ -46,6 +46,8 @@ export const ENDPOINTS = {
     BY_ID: ':id',
     BY_KEY: 'key/:key',
     MOVE: ':id/move',
+    BULK_UPDATE: 'bulk',
+    BULK_DELETE: 'bulk',
     LABELS: ':id/labels',
     LABEL_BY_ID: ':id/labels/:labelId',
     COMMENTS: ':id/comments',
