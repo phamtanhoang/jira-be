@@ -1,26 +1,22 @@
-# Stage 1: Build
 FROM node:20-alpine AS builder
-
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
+
+COPY prisma ./prisma
+RUN npx prisma generate
 
 COPY . .
-
-RUN npx prisma generate
 RUN npm run build
 
-# Stage 2: Production
 FROM node:20-alpine
-
 WORKDIR /app
-
+RUN apk add --no-cache tini
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/prisma ./prisma
-
 EXPOSE 3031
-
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "dist/main"]

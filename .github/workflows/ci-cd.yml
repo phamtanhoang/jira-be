@@ -45,15 +45,11 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
+            cd ~/projects/jira/jira-be
+            git pull origin main
             docker pull ${{ env.DOCKER_IMAGE }}:latest
-            docker stop jira-be || true
-            docker rm jira-be || true
-            docker run -d \
-              --name jira-be \
-              --restart unless-stopped \
-              --env-file ~/projects/jira/jira-be/.env \
-              -p 3031:3031 \
-              ${{ env.DOCKER_IMAGE }}:latest
+            docker compose up -d --force-recreate
+            docker image prune -f
 
       - name: Notify Telegram (Success)
         if: success()

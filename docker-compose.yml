@@ -1,0 +1,8 @@
+services:
+  jira-be:
+    image: phamtanhoang/jira-be:latest
+    container_name: jira-be
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "3031:3031"
