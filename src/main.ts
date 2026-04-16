@@ -14,7 +14,11 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Security
-  app.use(helmet());
+  app.use(
+    helmet({
+      hsts: false,
+    }),
+  );
   app.use(cookieParser());
   app.enableCors({
     origin: ENV.CORS_ORIGIN.split(','),
