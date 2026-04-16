@@ -4,7 +4,7 @@ NestJS backend for a Jira-like project management tool.
 
 ## Tech Stack
 
-- **Runtime:** Node.js + TypeScript 
+- **Runtime:** Node.js + TypeScript
 - **Framework:** NestJS
 - **Database:** PostgreSQL (Neon) + Prisma ORM
 - **Auth:** JWT + Passport (httpOnly cookies)
