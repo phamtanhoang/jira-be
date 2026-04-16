@@ -51,7 +51,7 @@ jobs:
             docker run -d \
               --name jira-be \
               --restart unless-stopped \
-              --env-file ~/jira/.env.be \
+              --env-file ~/projects/jira/jira-be/.env \
               -p 3031:3031 \
               ${{ env.DOCKER_IMAGE }}:latest
 
