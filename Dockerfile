@@ -5,6 +5,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
 COPY prisma ./prisma
+COPY prisma.config.ts ./
+COPY tsconfig.json ./
 RUN npx prisma generate
 
 COPY . .
