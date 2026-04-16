@@ -45,11 +45,6 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            # Kill old non-docker process if running
-            pkill -f "jira-be.*nest" || true
-            pkill -f "node.*jira-be/dist" || true
-
-            # Deploy with Docker
             docker pull ${{ env.DOCKER_IMAGE }}:latest
             docker stop jira-be || true
             docker rm jira-be || true
