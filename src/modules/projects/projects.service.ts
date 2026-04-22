@@ -112,18 +112,23 @@ export class ProjectsService {
     const project = await this.findById(projectId, userId);
     await this.assertRole(projectId, userId, [ProjectRole.LEAD, ProjectRole.ADMIN]);
 
+    const targetUser = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+    if (!targetUser) throw new NotFoundException(MSG.ERROR.USER_NOT_FOUND);
+
     // Target user must be a workspace member
-    await this.workspacesService.assertMember(project.workspaceId, dto.userId);
+    await this.workspacesService.assertMember(project.workspaceId, targetUser.id);
 
     const existing = await this.prisma.projectMember.findUnique({
-      where: { projectId_userId: { projectId, userId: dto.userId } },
+      where: { projectId_userId: { projectId, userId: targetUser.id } },
     });
     if (existing) throw new BadRequestException(MSG.ERROR.ALREADY_PROJECT_MEMBER);
 
     return this.prisma.projectMember.create({
       data: {
         projectId,
-        userId: dto.userId,
+        userId: targetUser.id,
         role: dto.role ?? ProjectRole.DEVELOPER,
       },
       include: { user: USER_SELECT_FULL },

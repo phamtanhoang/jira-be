@@ -1,12 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
 import { ProjectRole } from '@prisma/client';
+import { REGEX } from '@/core/constants';
 
 export class AddProjectMemberDto {
-  @ApiProperty({ example: 'user-uuid' })
+  @ApiProperty({ example: 'john@example.com' })
   @IsString()
   @IsNotEmpty()
-  userId!: string;
+  @Matches(REGEX.EMAIL)
+  email!: string;
 
   @ApiPropertyOptional({ enum: ProjectRole, example: ProjectRole.DEVELOPER })
   @IsEnum(ProjectRole)
