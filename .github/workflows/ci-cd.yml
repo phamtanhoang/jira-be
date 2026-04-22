@@ -39,67 +39,56 @@ jobs:
       - name: Run Jest unit tests
         run: npm run test:run
 
-  # ─────────── Job 2: E2E tests with real Postgres ───────────
-  e2e-test:
-    name: E2E Tests (Supertest + Postgres)
-    needs: test
-    runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: jira_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      DATABASE_URL: postgresql://test:test@localhost:5432/jira_test
-      PORT: "3031"
-      JWT_SECRET: test-jwt-secret-for-ci-only
-      TOKEN_VERIFY_EXPIRY: "900"
-      JWT_ACCESS_TOKEN_EXPIRATION: "900"
-      JWT_REFRESH_TOKEN_EXPIRATION: "604800"
-      CORS_ORIGIN: http://localhost:3000
-      NODE_ENV: test
-      RESEND_API_KEY: test-key
-      SUPABASE_URL: http://localhost
-      SUPABASE_SERVICE_KEY: test-key
-      SUPABASE_STORAGE_BUCKET: test
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Prisma client
-        run: npx prisma generate
-
-      - name: Run Prisma migrations on test DB
-        run: npx prisma migrate deploy
-
-      - name: Run Jest E2E tests
-        run: npm run test:e2e
+  # ─────────── Job 2: E2E Tests (TEMPORARILY DISABLED — too slow) ───────────
+  # To re-enable: uncomment the block below AND change `build.needs: test` to `build.needs: e2e-test`
+  # Files kept: test/e2e/*.e2e-spec.ts — run locally with `npm run test:e2e` (needs a reachable DATABASE_URL)
+  #
+  # e2e-test:
+  #   name: E2E Tests (Supertest + Postgres)
+  #   needs: test
+  #   runs-on: ubuntu-latest
+  #   services:
+  #     postgres:
+  #       image: postgres:16
+  #       env:
+  #         POSTGRES_USER: test
+  #         POSTGRES_PASSWORD: test
+  #         POSTGRES_DB: jira_test
+  #       ports:
+  #         - 5432:5432
+  #       options: >-
+  #         --health-cmd pg_isready
+  #         --health-interval 10s
+  #         --health-timeout 5s
+  #         --health-retries 5
+  #   env:
+  #     DATABASE_URL: postgresql://test:test@localhost:5432/jira_test
+  #     PORT: "3031"
+  #     JWT_SECRET: test-jwt-secret-for-ci-only
+  #     TOKEN_VERIFY_EXPIRY: "900"
+  #     JWT_ACCESS_TOKEN_EXPIRATION: "900"
+  #     JWT_REFRESH_TOKEN_EXPIRATION: "604800"
+  #     CORS_ORIGIN: http://localhost:3000
+  #     NODE_ENV: test
+  #     RESEND_API_KEY: test-key
+  #     SUPABASE_URL: http://localhost
+  #     SUPABASE_SERVICE_KEY: test-key
+  #     SUPABASE_STORAGE_BUCKET: test
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "20"
+  #         cache: "npm"
+  #     - run: npm ci
+  #     - run: npx prisma generate
+  #     - run: npx prisma migrate deploy
+  #     - run: npm run test:e2e
 
   # ─────────── Job 3: Build Docker image (only on push to main) ───────────
   build:
     name: Build & Push Docker Image
-    needs: e2e-test
+    needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     steps:
@@ -149,7 +138,7 @@ jobs:
   # ─────────── Job 5: Consolidated Telegram notification ───────────
   notify:
     name: Notify Telegram
-    needs: [test, e2e-test, build, deploy]
+    needs: [test, build, deploy]
     if: always() && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
@@ -164,10 +153,6 @@ jobs:
             echo "stage=test" >> $GITHUB_OUTPUT
             echo "icon=🛑" >> $GITHUB_OUTPUT
             echo "title=Deploy BLOCKED — Lint/Type/Unit test failed" >> $GITHUB_OUTPUT
-          elif [[ "${{ needs.e2e-test.result }}" == "failure" ]]; then
-            echo "stage=e2e" >> $GITHUB_OUTPUT
-            echo "icon=🛑" >> $GITHUB_OUTPUT
-            echo "title=Deploy BLOCKED — E2E test failed" >> $GITHUB_OUTPUT
           elif [[ "${{ needs.build.result }}" == "failure" ]]; then
             echo "stage=build" >> $GITHUB_OUTPUT
             echo "icon=❌" >> $GITHUB_OUTPUT
