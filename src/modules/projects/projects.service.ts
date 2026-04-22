@@ -7,8 +7,8 @@ import {
 import { ProjectRole } from '@prisma/client';
 import { MSG, USER_SELECT_FULL } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import { BoardsService } from '@/modules/boards/boards.service';
+import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import { AddProjectMemberDto, CreateProjectDto, UpdateProjectDto } from './dto';
 
 @Injectable()
@@ -23,7 +23,9 @@ export class ProjectsService {
     await this.workspacesService.assertMember(dto.workspaceId, userId);
 
     const existing = await this.prisma.project.findUnique({
-      where: { workspaceId_key: { workspaceId: dto.workspaceId, key: dto.key } },
+      where: {
+        workspaceId_key: { workspaceId: dto.workspaceId, key: dto.key },
+      },
     });
     if (existing) throw new BadRequestException(MSG.ERROR.PROJECT_KEY_EXISTS);
 
@@ -47,7 +49,11 @@ export class ProjectsService {
     });
 
     // Auto-create default board with columns
-    await this.boardsService.createDefaultBoard(project.id, project.name, project.type);
+    await this.boardsService.createDefaultBoard(
+      project.id,
+      project.name,
+      project.type,
+    );
 
     return project;
   }
@@ -85,7 +91,10 @@ export class ProjectsService {
 
   async update(projectId: string, userId: string, dto: UpdateProjectDto) {
     const project = await this.findById(projectId, userId);
-    await this.assertRole(projectId, userId, [ProjectRole.LEAD, ProjectRole.ADMIN]);
+    await this.assertRole(projectId, userId, [
+      ProjectRole.LEAD,
+      ProjectRole.ADMIN,
+    ]);
 
     return this.prisma.project.update({
       where: { id: project.id },
@@ -94,7 +103,9 @@ export class ProjectsService {
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.coverUrl !== undefined && { coverUrl: dto.coverUrl }),
         ...(dto.visibility !== undefined && { visibility: dto.visibility }),
-        ...(dto.defaultAssigneeId !== undefined && { defaultAssigneeId: dto.defaultAssigneeId }),
+        ...(dto.defaultAssigneeId !== undefined && {
+          defaultAssigneeId: dto.defaultAssigneeId,
+        }),
       },
     });
   }
@@ -110,7 +121,10 @@ export class ProjectsService {
 
   async addMember(projectId: string, userId: string, dto: AddProjectMemberDto) {
     const project = await this.findById(projectId, userId);
-    await this.assertRole(projectId, userId, [ProjectRole.LEAD, ProjectRole.ADMIN]);
+    await this.assertRole(projectId, userId, [
+      ProjectRole.LEAD,
+      ProjectRole.ADMIN,
+    ]);
 
     const targetUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -118,12 +132,16 @@ export class ProjectsService {
     if (!targetUser) throw new NotFoundException(MSG.ERROR.USER_NOT_FOUND);
 
     // Target user must be a workspace member
-    await this.workspacesService.assertMember(project.workspaceId, targetUser.id);
+    await this.workspacesService.assertMember(
+      project.workspaceId,
+      targetUser.id,
+    );
 
     const existing = await this.prisma.projectMember.findUnique({
       where: { projectId_userId: { projectId, userId: targetUser.id } },
     });
-    if (existing) throw new BadRequestException(MSG.ERROR.ALREADY_PROJECT_MEMBER);
+    if (existing)
+      throw new BadRequestException(MSG.ERROR.ALREADY_PROJECT_MEMBER);
 
     return this.prisma.projectMember.create({
       data: {
@@ -136,7 +154,10 @@ export class ProjectsService {
   }
 
   async removeMember(projectId: string, memberId: string, userId: string) {
-    await this.assertRole(projectId, userId, [ProjectRole.LEAD, ProjectRole.ADMIN]);
+    await this.assertRole(projectId, userId, [
+      ProjectRole.LEAD,
+      ProjectRole.ADMIN,
+    ]);
 
     const member = await this.prisma.projectMember.findUnique({
       where: { id: memberId },
@@ -153,7 +174,11 @@ export class ProjectsService {
 
   // ─── Helpers ──────────────────────────────────────────
 
-  private async assertRole(projectId: string, userId: string, roles: ProjectRole[]) {
+  private async assertRole(
+    projectId: string,
+    userId: string,
+    roles: ProjectRole[],
+  ) {
     const member = await this.prisma.projectMember.findUnique({
       where: { projectId_userId: { projectId, userId } },
     });

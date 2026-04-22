@@ -7,7 +7,10 @@ export class CreateCommentDto {
   @IsNotEmpty()
   content!: string;
 
-  @ApiPropertyOptional({ example: 'parent-comment-uuid', description: 'For threaded replies' })
+  @ApiPropertyOptional({
+    example: 'parent-comment-uuid',
+    description: 'For threaded replies',
+  })
   @IsString()
   @IsOptional()
   parentId?: string;

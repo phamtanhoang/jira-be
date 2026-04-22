@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
 import { BoardsModule } from '@/modules/boards/boards.module';
+import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
 import { ProjectsController } from './projects.controller';
 import { ProjectsService } from './projects.service';
 

@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IssuePriority, IssueType } from '@prisma/client';
 import {
   IsDateString,
   IsEnum,
@@ -9,7 +10,6 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { IssuePriority, IssueType } from '@prisma/client';
 
 export class CreateIssueDto {
   @ApiProperty({ example: 'project-uuid' })
@@ -43,7 +43,10 @@ export class CreateIssueDto {
   @IsOptional()
   assigneeId?: string;
 
-  @ApiPropertyOptional({ example: 'parent-issue-uuid', description: 'For subtasks' })
+  @ApiPropertyOptional({
+    example: 'parent-issue-uuid',
+    description: 'For subtasks',
+  })
   @IsString()
   @IsOptional()
   parentId?: string;

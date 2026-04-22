@@ -58,7 +58,9 @@ export class SprintsService {
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.goal !== undefined && { goal: dto.goal }),
-        ...(dto.startDate !== undefined && { startDate: new Date(dto.startDate) }),
+        ...(dto.startDate !== undefined && {
+          startDate: new Date(dto.startDate),
+        }),
         ...(dto.endDate !== undefined && { endDate: new Date(dto.endDate) }),
       },
     });
@@ -71,7 +73,8 @@ export class SprintsService {
     const activeSprint = await this.prisma.sprint.findFirst({
       where: { boardId: sprint.boardId, status: SprintStatus.ACTIVE },
     });
-    if (activeSprint) throw new BadRequestException(MSG.ERROR.SPRINT_ALREADY_ACTIVE);
+    if (activeSprint)
+      throw new BadRequestException(MSG.ERROR.SPRINT_ALREADY_ACTIVE);
 
     return this.prisma.sprint.update({
       where: { id: sprint.id },
@@ -124,10 +127,16 @@ export class SprintsService {
 
     // All issues in this sprint
     const issues = sprint.issues;
-    const totalPoints = issues.reduce((sum, i) => sum + (i.storyPoints ?? 1), 0);
+    const totalPoints = issues.reduce(
+      (sum, i) => sum + (i.storyPoints ?? 1),
+      0,
+    );
 
     // Build daily burndown
-    const totalDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / 86400000));
+    const totalDays = Math.max(
+      1,
+      Math.ceil((endDate.getTime() - startDate.getTime()) / 86400000),
+    );
     const pointsPerDay = totalPoints / totalDays;
 
     const days: { date: string; ideal: number; actual: number }[] = [];
@@ -139,12 +148,19 @@ export class SprintsService {
 
       // Count points completed by this date (issues with completedAt <= currentDate)
       const donePoints = issues
-        .filter((i) => i.completedAt && new Date(i.completedAt).toISOString().slice(0, 10) <= dateStr)
+        .filter(
+          (i) =>
+            i.completedAt &&
+            new Date(i.completedAt).toISOString().slice(0, 10) <= dateStr,
+        )
         .reduce((sum, i) => sum + (i.storyPoints ?? 1), 0);
 
       days.push({
         date: dateStr,
-        ideal: Math.max(0, Math.round((totalPoints - pointsPerDay * d) * 10) / 10),
+        ideal: Math.max(
+          0,
+          Math.round((totalPoints - pointsPerDay * d) * 10) / 10,
+        ),
         actual: totalPoints - donePoints,
       });
     }
@@ -161,7 +177,10 @@ export class SprintsService {
     });
     if (!board) throw new NotFoundException(MSG.ERROR.BOARD_NOT_FOUND);
 
-    await this.workspacesService.assertMember(board.project.workspaceId, userId);
+    await this.workspacesService.assertMember(
+      board.project.workspaceId,
+      userId,
+    );
     return board;
   }
 }

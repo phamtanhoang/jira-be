@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ENDPOINTS, MSG } from '@/core/constants';
 import { CurrentUser } from '@/core/decorators';
@@ -22,7 +30,10 @@ export class LabelsController {
 
   @Get()
   @ApiOperation({ summary: 'List labels by project' })
-  findAll(@Query('projectId') projectId: string, @CurrentUser() user: AuthUser) {
+  findAll(
+    @Query('projectId') projectId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
     return this.labelsService.findAllByProject(projectId, user.id);
   }
 

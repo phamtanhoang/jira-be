@@ -11,8 +11,8 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ENDPOINTS, MSG } from '@/core/constants';
 import { CurrentUser } from '@/core/decorators';
 import { AuthUser } from '@/core/types';
-import { CreateColumnDto, UpdateColumnDto, ReorderColumnsDto } from './dto';
 import { BoardsService } from './boards.service';
+import { CreateColumnDto, UpdateColumnDto, ReorderColumnsDto } from './dto';
 
 const E = ENDPOINTS.BOARDS;
 
@@ -23,7 +23,10 @@ export class BoardsController {
 
   @Get(E.BY_PROJECT)
   @ApiOperation({ summary: 'Get board by project ID (with columns & issues)' })
-  findByProject(@Param('projectId') projectId: string, @CurrentUser() user: AuthUser) {
+  findByProject(
+    @Param('projectId') projectId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
     return this.boardsService.findByProject(projectId, user.id);
   }
 
@@ -46,7 +49,12 @@ export class BoardsController {
     @CurrentUser() user: AuthUser,
     @Body() dto: UpdateColumnDto,
   ) {
-    const column = await this.boardsService.updateColumn(boardId, columnId, user.id, dto);
+    const column = await this.boardsService.updateColumn(
+      boardId,
+      columnId,
+      user.id,
+      dto,
+    );
     return { message: MSG.SUCCESS.COLUMN_UPDATED, column };
   }
 
@@ -68,7 +76,11 @@ export class BoardsController {
     @CurrentUser() user: AuthUser,
     @Body() dto: ReorderColumnsDto,
   ) {
-    const columns = await this.boardsService.reorderColumns(boardId, user.id, dto);
+    const columns = await this.boardsService.reorderColumns(
+      boardId,
+      user.id,
+      dto,
+    );
     return { message: MSG.SUCCESS.COLUMNS_REORDERED, columns };
   }
 }

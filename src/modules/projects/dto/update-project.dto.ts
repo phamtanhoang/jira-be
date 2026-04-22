@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Visibility } from '@prisma/client';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateProjectDto {
   @ApiPropertyOptional({ example: 'Updated Name' })
@@ -25,7 +25,10 @@ export class UpdateProjectDto {
   @IsOptional()
   visibility?: Visibility;
 
-  @ApiPropertyOptional({ example: 'user-uuid', description: 'Default assignee user ID' })
+  @ApiPropertyOptional({
+    example: 'user-uuid',
+    description: 'Default assignee user ID',
+  })
   @IsString()
   @IsOptional()
   defaultAssigneeId?: string;

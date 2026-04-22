@@ -1,4 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IssuePriority, IssueType } from '@prisma/client';
 import {
   IsDateString,
   IsEnum,
@@ -8,7 +9,6 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { IssuePriority, IssueType } from '@prisma/client';
 
 export class UpdateIssueDto {
   @ApiPropertyOptional({ example: 'Updated summary' })

@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IssuePriority } from '@prisma/client';
 import {
   IsArray,
   IsEnum,
@@ -6,7 +7,6 @@ import {
   IsString,
   ArrayMinSize,
 } from 'class-validator';
-import { IssuePriority } from '@prisma/client';
 
 export class BulkUpdateIssueDto {
   @ApiProperty({ example: ['uuid-1', 'uuid-2'] })

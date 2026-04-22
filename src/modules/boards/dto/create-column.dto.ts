@@ -1,6 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { StatusCategory } from '@prisma/client';
+import {
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateColumnDto {
   @ApiProperty({ example: 'In Review' })
@@ -9,7 +17,10 @@ export class CreateColumnDto {
   @MaxLength(50)
   name!: string;
 
-  @ApiPropertyOptional({ enum: StatusCategory, example: StatusCategory.IN_PROGRESS })
+  @ApiPropertyOptional({
+    enum: StatusCategory,
+    example: StatusCategory.IN_PROGRESS,
+  })
   @IsEnum(StatusCategory)
   @IsOptional()
   category?: StatusCategory;

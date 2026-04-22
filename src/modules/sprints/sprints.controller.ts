@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ENDPOINTS, MSG } from '@/core/constants';
 import { CurrentUser } from '@/core/decorators';
@@ -45,7 +53,9 @@ export class SprintsController {
   }
 
   @Post(E.COMPLETE)
-  @ApiOperation({ summary: 'Complete sprint (moves incomplete issues to backlog)' })
+  @ApiOperation({
+    summary: 'Complete sprint (moves incomplete issues to backlog)',
+  })
   async complete(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     const sprint = await this.sprintsService.complete(id, user.id);
     return { message: MSG.SUCCESS.SPRINT_COMPLETED, sprint };

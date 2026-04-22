@@ -1,11 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ActivityAction, IssueType, IssuePriority, Prisma, StatusCategory } from '@prisma/client';
-
-const ACTIVITY_LIMIT = 20;
+import {
+  ActivityAction,
+  IssueType,
+  IssuePriority,
+  Prisma,
+  StatusCategory,
+} from '@prisma/client';
 import { MSG, USER_SELECT_BASIC, BOARD_COLUMN_SELECT } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import { CreateIssueDto, UpdateIssueDto, MoveIssueDto } from './dto';
+
+const ACTIVITY_LIMIT = 20;
 
 const ISSUE_INCLUDE = {
   reporter: USER_SELECT_BASIC,
@@ -28,7 +34,11 @@ export class IssuesService {
   async create(userId: string, dto: CreateIssueDto) {
     const project = await this.prisma.project.findUnique({
       where: { id: dto.projectId },
-      include: { board: { include: { columns: { orderBy: { position: 'asc' }, take: 1 } } } },
+      include: {
+        board: {
+          include: { columns: { orderBy: { position: 'asc' }, take: 1 } },
+        },
+      },
     });
     if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
 
@@ -77,31 +87,48 @@ export class IssuesService {
     });
   }
 
-  async findAll(projectId: string, userId: string, filters?: {
-    sprintId?: string;
-    assigneeId?: string;
-    type?: string;
-    priority?: string;
-    search?: string;
-    cursor?: string;
-    take?: number;
-  }) {
-    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+  async findAll(
+    projectId: string,
+    userId: string,
+    filters?: {
+      sprintId?: string;
+      assigneeId?: string;
+      type?: string;
+      priority?: string;
+      search?: string;
+      cursor?: string;
+      take?: number;
+    },
+  ) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
     if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
 
     await this.workspacesService.assertMember(project.workspaceId, userId);
 
     const where = {
       projectId,
-      ...(filters?.sprintId && filters.sprintId !== 'backlog' && { sprintId: filters.sprintId }),
+      ...(filters?.sprintId &&
+        filters.sprintId !== 'backlog' && { sprintId: filters.sprintId }),
       ...(filters?.sprintId === 'backlog' && { sprintId: null }),
       ...(filters?.assigneeId && { assigneeId: filters.assigneeId }),
       ...(filters?.type && { type: filters.type as IssueType }),
       ...(filters?.priority && { priority: filters.priority as IssuePriority }),
       ...(filters?.search && {
         OR: [
-          { summary: { contains: filters.search, mode: Prisma.QueryMode.insensitive } },
-          { key: { contains: filters.search, mode: Prisma.QueryMode.insensitive } },
+          {
+            summary: {
+              contains: filters.search,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
+          {
+            key: {
+              contains: filters.search,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
         ],
       }),
     };
@@ -161,7 +188,9 @@ export class IssuesService {
     });
     if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
 
-    const project = await this.prisma.project.findUnique({ where: { id: issue.projectId } });
+    const project = await this.prisma.project.findUnique({
+      where: { id: issue.projectId },
+    });
     await this.workspacesService.assertMember(project!.workspaceId, userId);
 
     return issue;
@@ -174,7 +203,9 @@ export class IssuesService {
     });
     if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
 
-    const project = await this.prisma.project.findUnique({ where: { id: issue.projectId } });
+    const project = await this.prisma.project.findUnique({
+      where: { id: issue.projectId },
+    });
     await this.workspacesService.assertMember(project!.workspaceId, userId);
 
     return issue;
@@ -184,7 +215,25 @@ export class IssuesService {
     const issue = await this.findById(issueId, userId);
 
     const data: Record<string, unknown> = {};
-    const activities: { field: string; oldValue: string | null; newValue: string | null }[] = [];
+    const activities: {
+      field: string;
+      oldValue: string | null;
+      newValue: string | null;
+    }[] = [];
+
+    const stringifyValue = (v: unknown): string | null => {
+      if (v == null) return null;
+      if (v instanceof Date) return v.toISOString();
+      if (typeof v === 'string') return v;
+      if (
+        typeof v === 'number' ||
+        typeof v === 'boolean' ||
+        typeof v === 'bigint'
+      ) {
+        return v.toString();
+      }
+      return JSON.stringify(v);
+    };
 
     for (const [field, value] of Object.entries(dto)) {
       if (value === undefined) continue;
@@ -196,8 +245,8 @@ export class IssuesService {
       }
       activities.push({
         field,
-        oldValue: oldVal != null ? String(oldVal) : null,
-        newValue: value != null ? String(value) : null,
+        oldValue: stringifyValue(oldVal),
+        newValue: stringifyValue(value),
       });
     }
 
@@ -213,7 +262,10 @@ export class IssuesService {
         data: activities.map((a) => ({
           issueId,
           userId,
-          action: a.field === 'assigneeId' ? ActivityAction.ASSIGNED : ActivityAction.UPDATED,
+          action:
+            a.field === 'assigneeId'
+              ? ActivityAction.ASSIGNED
+              : ActivityAction.UPDATED,
           field: a.field,
           oldValue: a.oldValue,
           newValue: a.newValue,
@@ -227,7 +279,9 @@ export class IssuesService {
   async move(issueId: string, userId: string, dto: MoveIssueDto) {
     const issue = await this.findById(issueId, userId);
 
-    const column = await this.prisma.boardColumn.findUnique({ where: { id: dto.columnId } });
+    const column = await this.prisma.boardColumn.findUnique({
+      where: { id: dto.columnId },
+    });
     if (!column) throw new NotFoundException(MSG.ERROR.COLUMN_NOT_FOUND);
 
     const oldColumnId = issue.boardColumnId;
@@ -237,7 +291,8 @@ export class IssuesService {
       data: {
         boardColumnId: dto.columnId,
         position: dto.position ?? 0,
-        completedAt: column.category === StatusCategory.DONE ? new Date() : null,
+        completedAt:
+          column.category === StatusCategory.DONE ? new Date() : null,
       },
       include: ISSUE_INCLUDE,
     });
@@ -245,7 +300,9 @@ export class IssuesService {
     // Log transition
     if (oldColumnId !== dto.columnId) {
       const oldColumn = oldColumnId
-        ? await this.prisma.boardColumn.findUnique({ where: { id: oldColumnId } })
+        ? await this.prisma.boardColumn.findUnique({
+            where: { id: oldColumnId },
+          })
         : null;
 
       await this.prisma.activity.create({
@@ -285,7 +342,12 @@ export class IssuesService {
 
   async bulkUpdate(
     userId: string,
-    dto: { issueIds: string[]; sprintId?: string | null; assigneeId?: string | null; priority?: string },
+    dto: {
+      issueIds: string[];
+      sprintId?: string | null;
+      assigneeId?: string | null;
+      priority?: string;
+    },
   ) {
     // Verify access for first issue (all should be in same project)
     await this.findById(dto.issueIds[0], userId);

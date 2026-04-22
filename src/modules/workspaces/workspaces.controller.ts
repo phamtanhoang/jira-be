@@ -84,7 +84,12 @@ export class WorkspacesController {
     @CurrentUser() user: AuthUser,
     @Body() dto: UpdateWorkspaceMemberDto,
   ) {
-    const member = await this.workspacesService.updateMember(id, memberId, user.id, dto);
+    const member = await this.workspacesService.updateMember(
+      id,
+      memberId,
+      user.id,
+      dto,
+    );
     return { message: MSG.SUCCESS.MEMBER_UPDATED, member };
   }
 

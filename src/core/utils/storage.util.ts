@@ -30,12 +30,10 @@ export async function uploadFile(
   const safeName = fileName.replace(/[^a-zA-Z0-9.\-_]/g, '_');
   const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${safeName}`;
 
-  const { error } = await supabase.storage
-    .from(bucket)
-    .upload(path, buffer, {
-      contentType: mimeType,
-      upsert: false,
-    });
+  const { error } = await supabase.storage.from(bucket).upload(path, buffer, {
+    contentType: mimeType,
+    upsert: false,
+  });
 
   if (error) {
     console.error('Supabase upload error:', error);

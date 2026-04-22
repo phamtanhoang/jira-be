@@ -20,12 +20,20 @@ const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_FILES = 10;
 
 const ALLOWED_MIMES = [
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
   'application/pdf',
-  'application/zip', 'application/x-zip-compressed',
-  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'text/plain', 'text/csv',
+  'application/zip',
+  'application/x-zip-compressed',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+  'text/csv',
 ];
 
 // Issue-scoped routes: POST/GET /issues/:id/attachments
@@ -55,8 +63,13 @@ export class AttachmentsIssueController {
     @CurrentUser() user: AuthUser,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
-    if (!files || files.length === 0) throw new BadRequestException('No files uploaded');
-    const attachments = await this.attachmentsService.uploadMany(issueId, user.id, files);
+    if (!files || files.length === 0)
+      throw new BadRequestException('No files uploaded');
+    const attachments = await this.attachmentsService.uploadMany(
+      issueId,
+      user.id,
+      files,
+    );
     return { message: MSG.SUCCESS.ATTACHMENT_UPLOADED, attachments };
   }
 

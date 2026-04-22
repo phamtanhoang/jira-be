@@ -24,7 +24,8 @@ export class WorkspacesService {
     const existing = await this.prisma.workspace.findUnique({
       where: { slug },
     });
-    if (existing) throw new BadRequestException(MSG.ERROR.WORKSPACE_SLUG_EXISTS);
+    if (existing)
+      throw new BadRequestException(MSG.ERROR.WORKSPACE_SLUG_EXISTS);
 
     return this.prisma.workspace.create({
       data: {
@@ -36,7 +37,15 @@ export class WorkspacesService {
           create: { userId, role: WorkspaceRole.OWNER },
         },
       },
-      include: { members: { include: { user: { select: { id: true, name: true, email: true, image: true } } } } },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: { id: true, name: true, email: true, image: true },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -57,7 +66,9 @@ export class WorkspacesService {
       include: {
         members: {
           include: {
-            user: { select: { id: true, name: true, email: true, image: true } },
+            user: {
+              select: { id: true, name: true, email: true, image: true },
+            },
           },
           orderBy: { joinedAt: 'asc' },
         },
@@ -72,7 +83,10 @@ export class WorkspacesService {
   }
 
   async update(workspaceId: string, userId: string, dto: UpdateWorkspaceDto) {
-    await this.assertRole(workspaceId, userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+    await this.assertRole(workspaceId, userId, [
+      WorkspaceRole.OWNER,
+      WorkspaceRole.ADMIN,
+    ]);
 
     const data: Record<string, unknown> = {};
     if (dto.name !== undefined) {
@@ -103,8 +117,15 @@ export class WorkspacesService {
 
   // ─── Members ──────────────────────────────────────────
 
-  async addMember(workspaceId: string, userId: string, dto: AddWorkspaceMemberDto) {
-    await this.assertRole(workspaceId, userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+  async addMember(
+    workspaceId: string,
+    userId: string,
+    dto: AddWorkspaceMemberDto,
+  ) {
+    await this.assertRole(workspaceId, userId, [
+      WorkspaceRole.OWNER,
+      WorkspaceRole.ADMIN,
+    ]);
 
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -114,7 +135,8 @@ export class WorkspacesService {
     const existing = await this.prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId: user.id } },
     });
-    if (existing) throw new BadRequestException(MSG.ERROR.ALREADY_WORKSPACE_MEMBER);
+    if (existing)
+      throw new BadRequestException(MSG.ERROR.ALREADY_WORKSPACE_MEMBER);
 
     return this.prisma.workspaceMember.create({
       data: {
@@ -134,7 +156,10 @@ export class WorkspacesService {
     userId: string,
     dto: UpdateWorkspaceMemberDto,
   ) {
-    await this.assertRole(workspaceId, userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+    await this.assertRole(workspaceId, userId, [
+      WorkspaceRole.OWNER,
+      WorkspaceRole.ADMIN,
+    ]);
 
     const member = await this.prisma.workspaceMember.findUnique({
       where: { id: memberId },
@@ -156,7 +181,10 @@ export class WorkspacesService {
   }
 
   async removeMember(workspaceId: string, memberId: string, userId: string) {
-    await this.assertRole(workspaceId, userId, [WorkspaceRole.OWNER, WorkspaceRole.ADMIN]);
+    await this.assertRole(workspaceId, userId, [
+      WorkspaceRole.OWNER,
+      WorkspaceRole.ADMIN,
+    ]);
 
     const member = await this.prisma.workspaceMember.findUnique({
       where: { id: memberId },
@@ -191,7 +219,11 @@ export class WorkspacesService {
     return member;
   }
 
-  private async assertRole(workspaceId: string, userId: string, roles: WorkspaceRole[]) {
+  private async assertRole(
+    workspaceId: string,
+    userId: string,
+    roles: WorkspaceRole[],
+  ) {
     const member = await this.assertMember(workspaceId, userId);
     if (!roles.includes(member.role)) {
       throw new ForbiddenException(MSG.ERROR.INSUFFICIENT_PERMISSIONS);

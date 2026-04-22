@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
@@ -12,7 +16,9 @@ export class LabelsService {
   ) {}
 
   async create(userId: string, dto: CreateLabelDto) {
-    const project = await this.prisma.project.findUnique({ where: { id: dto.projectId } });
+    const project = await this.prisma.project.findUnique({
+      where: { id: dto.projectId },
+    });
     if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
 
     await this.workspacesService.assertMember(project.workspaceId, userId);
@@ -28,7 +34,9 @@ export class LabelsService {
   }
 
   async findAllByProject(projectId: string, userId: string) {
-    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
     if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
 
     await this.workspacesService.assertMember(project.workspaceId, userId);
@@ -47,7 +55,10 @@ export class LabelsService {
     });
     if (!label) throw new NotFoundException(MSG.ERROR.LABEL_NOT_FOUND);
 
-    await this.workspacesService.assertMember(label.project.workspaceId, userId);
+    await this.workspacesService.assertMember(
+      label.project.workspaceId,
+      userId,
+    );
 
     return this.prisma.label.delete({ where: { id: labelId } });
   }

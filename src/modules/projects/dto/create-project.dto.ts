@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ProjectType, Visibility } from '@prisma/client';
 import {
   IsEnum,
   IsNotEmpty,
@@ -7,7 +8,6 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
-import { ProjectType, Visibility } from '@prisma/client';
 
 export class CreateProjectDto {
   @ApiProperty({ example: 'My Project' })

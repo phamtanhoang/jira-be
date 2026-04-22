@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ActivityAction } from '@prisma/client';
 import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
@@ -9,7 +13,9 @@ export class CommentsService {
   constructor(private prisma: PrismaService) {}
 
   async create(issueId: string, userId: string, dto: CreateCommentDto) {
-    const issue = await this.prisma.issue.findUnique({ where: { id: issueId } });
+    const issue = await this.prisma.issue.findUnique({
+      where: { id: issueId },
+    });
     if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
 
     const comment = await this.prisma.comment.create({
@@ -51,9 +57,12 @@ export class CommentsService {
   }
 
   async update(commentId: string, userId: string, dto: UpdateCommentDto) {
-    const comment = await this.prisma.comment.findUnique({ where: { id: commentId } });
+    const comment = await this.prisma.comment.findUnique({
+      where: { id: commentId },
+    });
     if (!comment) throw new NotFoundException(MSG.ERROR.COMMENT_NOT_FOUND);
-    if (comment.authorId !== userId) throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);
+    if (comment.authorId !== userId)
+      throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);
 
     return this.prisma.comment.update({
       where: { id: commentId },
@@ -63,9 +72,12 @@ export class CommentsService {
   }
 
   async delete(commentId: string, userId: string) {
-    const comment = await this.prisma.comment.findUnique({ where: { id: commentId } });
+    const comment = await this.prisma.comment.findUnique({
+      where: { id: commentId },
+    });
     if (!comment) throw new NotFoundException(MSG.ERROR.COMMENT_NOT_FOUND);
-    if (comment.authorId !== userId) throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);
+    if (comment.authorId !== userId)
+      throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);
 
     return this.prisma.comment.delete({ where: { id: commentId } });
   }

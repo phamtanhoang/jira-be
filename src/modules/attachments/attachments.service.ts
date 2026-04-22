@@ -27,12 +27,16 @@ export class AttachmentsService {
     });
     if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
 
-    await this.workspacesService.assertMember(issue.project.workspaceId, userId);
+    await this.workspacesService.assertMember(
+      issue.project.workspaceId,
+      userId,
+    );
 
-    const attachments: Awaited<ReturnType<typeof this.prisma.attachment.create>>[] = [];
+    const attachments: Awaited<
+      ReturnType<typeof this.prisma.attachment.create>
+    >[] = [];
 
     for (const file of files) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
       const fileUrl: string = await uploadFile(
         file.buffer,
         file.originalname,
@@ -75,7 +79,10 @@ export class AttachmentsService {
     });
     if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
 
-    await this.workspacesService.assertMember(issue.project.workspaceId, userId);
+    await this.workspacesService.assertMember(
+      issue.project.workspaceId,
+      userId,
+    );
 
     return this.prisma.attachment.findMany({
       where: { issueId },
@@ -88,13 +95,13 @@ export class AttachmentsService {
     const attachment = await this.prisma.attachment.findUnique({
       where: { id: attachmentId },
     });
-    if (!attachment) throw new NotFoundException(MSG.ERROR.ATTACHMENT_NOT_FOUND);
+    if (!attachment)
+      throw new NotFoundException(MSG.ERROR.ATTACHMENT_NOT_FOUND);
 
     if (attachment.uploadedById !== userId) {
       throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     await deleteFile(attachment.fileUrl);
 
     return this.prisma.attachment.delete({ where: { id: attachmentId } });

@@ -7,7 +7,10 @@ export class MoveIssueDto {
   @IsNotEmpty()
   columnId!: string;
 
-  @ApiPropertyOptional({ example: 0, description: 'Position within the column' })
+  @ApiPropertyOptional({
+    example: 0,
+    description: 'Position within the column',
+  })
   @IsInt()
   @Min(0)
   @IsOptional()
