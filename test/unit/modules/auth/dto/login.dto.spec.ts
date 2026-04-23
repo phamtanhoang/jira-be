@@ -1,8 +1,8 @@
 /**
  * DTO validation tests for LoginDto — covers class-validator decorators.
  */
-import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { LoginDto } from '@/modules/auth/dto/login.dto';
 
 function toDto(payload: Record<string, unknown>) {

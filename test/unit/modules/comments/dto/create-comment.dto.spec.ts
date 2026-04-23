@@ -1,5 +1,5 @@
-import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { CreateCommentDto } from '@/modules/comments/dto/create-comment.dto';
 
 function toDto(payload: Record<string, unknown>) {

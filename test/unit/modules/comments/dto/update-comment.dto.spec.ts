@@ -1,5 +1,5 @@
-import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { UpdateCommentDto } from '@/modules/comments/dto/update-comment.dto';
 
 describe('UpdateCommentDto', () => {

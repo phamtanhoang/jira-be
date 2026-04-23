@@ -1,6 +1,6 @@
-import { validate } from 'class-validator';
-import { plainToInstance } from 'class-transformer';
 import { StatusCategory } from '@prisma/client';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { UpdateColumnDto } from '@/modules/boards/dto/update-column.dto';
 
 function toDto(payload: Record<string, unknown>) {

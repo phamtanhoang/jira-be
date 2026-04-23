@@ -1,5 +1,5 @@
-import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { VerifyEmailDto } from '@/modules/auth/dto/verify-email.dto';
 
 function toDto(payload: Record<string, unknown>) {

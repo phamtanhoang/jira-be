@@ -1,5 +1,5 @@
-import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { RegisterDto } from '@/modules/auth/dto/register.dto';
 
 function toDto(payload: Record<string, unknown>) {

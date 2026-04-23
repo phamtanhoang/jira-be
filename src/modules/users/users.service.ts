@@ -18,8 +18,12 @@ export class UsersService {
 
     if (query.search) {
       where.OR = [
-        { email: { contains: query.search, mode: Prisma.QueryMode.insensitive } },
-        { name: { contains: query.search, mode: Prisma.QueryMode.insensitive } },
+        {
+          email: { contains: query.search, mode: Prisma.QueryMode.insensitive },
+        },
+        {
+          name: { contains: query.search, mode: Prisma.QueryMode.insensitive },
+        },
       ];
     }
     if (query.role) where.role = query.role;
@@ -32,9 +36,7 @@ export class UsersService {
       where,
       orderBy: { createdAt: 'desc' },
       take: take + 1,
-      ...(query.cursor
-        ? { skip: 1, cursor: { id: query.cursor } }
-        : {}),
+      ...(query.cursor ? { skip: 1, cursor: { id: query.cursor } } : {}),
     });
 
     const hasMore = data.length > take;

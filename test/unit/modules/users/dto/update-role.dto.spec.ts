@@ -1,6 +1,6 @@
-import { validate } from 'class-validator';
-import { plainToInstance } from 'class-transformer';
 import { Role } from '@prisma/client';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { UpdateRoleDto } from '@/modules/users/dto/update-role.dto';
 
 describe('UpdateRoleDto', () => {

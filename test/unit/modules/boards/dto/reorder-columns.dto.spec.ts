@@ -1,5 +1,5 @@
-import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { ReorderColumnsDto } from '@/modules/boards/dto/reorder-columns.dto';
 
 function toDto(payload: Record<string, unknown>) {

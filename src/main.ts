@@ -11,7 +11,8 @@ import { AppModule } from './app.module';
 // Initialize Sentry before Nest bootstrap so all subsequent errors are captured.
 // No-op when SENTRY_DSN is missing OR when running outside production — keeps
 // local `npm run start:dev` from burning the project's event quota.
-const SENTRY_ENABLED = !!ENV.SENTRY_DSN && process.env.NODE_ENV === 'production';
+const SENTRY_ENABLED =
+  !!ENV.SENTRY_DSN && process.env.NODE_ENV === 'production';
 if (SENTRY_ENABLED) {
   Sentry.init({
     dsn: ENV.SENTRY_DSN,

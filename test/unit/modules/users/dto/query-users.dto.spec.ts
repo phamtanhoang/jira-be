@@ -1,6 +1,6 @@
-import { validate } from 'class-validator';
-import { plainToInstance } from 'class-transformer';
 import { Role } from '@prisma/client';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { QueryUsersDto } from '@/modules/users/dto/query-users.dto';
 
 function toDto(payload: Record<string, unknown>) {
