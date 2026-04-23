@@ -76,4 +76,13 @@ export const ENDPOINTS = {
     BY_ID: ':id',
     CLIENT: 'client',
   },
+  USERS: {
+    BASE: 'users',
+    BY_ID: ':id',
+    ROLE: ':id/role',
+  },
+  ADMIN: {
+    BASE: 'admin',
+    STATS: 'stats',
+  },
 } as const;

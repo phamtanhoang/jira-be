@@ -17,3 +17,24 @@ export const USER_SELECT_FULL = {
 export const BOARD_COLUMN_SELECT = {
   select: { id: true, name: true, category: true },
 } as const;
+
+/** User select for admin user management — includes role + relation counts */
+export const USER_SELECT_ADMIN = {
+  select: {
+    id: true,
+    name: true,
+    email: true,
+    emailVerified: true,
+    image: true,
+    role: true,
+    createdAt: true,
+    updatedAt: true,
+    _count: {
+      select: {
+        ownedWorkspaces: true,
+        assignedIssues: true,
+        comments: true,
+      },
+    },
+  },
+} as const;

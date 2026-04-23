@@ -21,6 +21,7 @@ import { LogsModule } from '@/modules/logs/logs.module';
 import { ProjectsModule } from '@/modules/projects/projects.module';
 import { SettingsModule } from '@/modules/settings/settings.module';
 import { SprintsModule } from '@/modules/sprints/sprints.module';
+import { UsersModule } from '@/modules/users/users.module';
 import { WorklogsModule } from '@/modules/worklogs/worklogs.module';
 import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
 
@@ -41,6 +42,7 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     CommentsModule,
     WorklogsModule,
     AttachmentsModule,
+    UsersModule,
     DebugModule,
   ],
   providers: [

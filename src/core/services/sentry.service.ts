@@ -4,16 +4,18 @@ import { ENV } from '@/core/constants';
 
 /**
  * Thin wrapper around @sentry/nestjs so the filter/service code stays framework-
- * agnostic. When SENTRY_DSN is missing (dev without a Sentry account), every
- * method is a no-op — never throws.
+ * agnostic. Every method is a no-op when:
+ *   - SENTRY_DSN is missing (dev without a Sentry account), OR
+ *   - NODE_ENV !== 'production' (local dev should never burn the quota).
  *
- * The actual Sentry.init() call lives in main.ts (it must run before
- * NestFactory.create).
+ * The actual Sentry.init() call lives in main.ts and uses the same guard;
+ * this flag mirrors it so capture calls short-circuit before reaching the SDK.
  */
 @Injectable()
 export class SentryService {
   private readonly logger = new Logger(SentryService.name);
-  private readonly enabled = !!ENV.SENTRY_DSN;
+  private readonly enabled =
+    !!ENV.SENTRY_DSN && process.env.NODE_ENV === 'production';
 
   captureException(
     exception: unknown,

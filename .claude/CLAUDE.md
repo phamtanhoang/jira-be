@@ -23,7 +23,7 @@ npm run test            # Jest
 ## Directory Structure
 ```
 src/
-├── main.ts                 # Bootstrap: Sentry.init (if DSN), Helmet, CORS, ValidationPipe, Swagger at /api
+├── main.ts                 # Bootstrap: Sentry.init (only when DSN set AND NODE_ENV=production), Helmet, CORS, ValidationPipe, Swagger at /api
 ├── app.module.ts           # Imports all modules. Global: JwtAuthGuard, RolesGuard, ThrottlerGuard, TimezoneInterceptor, RequestLoggerInterceptor, AllExceptionsFilter. ScheduleModule.forRoot() for cron.
 ├── core/
 │   ├── constants/          # ENV, MSG, ENDPOINTS, COOKIE_KEYS, REGEX, SETTING_KEYS, USER_SELECT_BASIC/FULL, BOARD_COLUMN_SELECT
@@ -33,7 +33,7 @@ src/
 │   ├── guards/             # JwtAuthGuard (respects @Public), RolesGuard (checks @Roles)
 │   ├── interceptors/       # TimezoneInterceptor (x-timezone header), RequestLoggerInterceptor (success path → RequestLog)
 │   ├── mail/               # MailService (Resend API), OTP email template
-│   ├── services/           # SentryService (thin @sentry/nestjs wrapper, no-op if SENTRY_DSN missing)
+│   ├── services/           # SentryService (thin @sentry/nestjs wrapper, no-op if SENTRY_DSN missing OR NODE_ENV !== "production" — dev never sends to Sentry)
 │   ├── types/              # AuthUser {id, name, email, emailVerified, image, role, createdAt}
 │   └── utils/              # hashPassword, generateOTP, cookieExtractor, timezone conversion, sanitize (recursive PII masker)
 └── modules/
@@ -46,8 +46,9 @@ src/
     ├── labels/             # Project-scoped, unique name per project, default color #6b778c
     ├── comments/           # Threaded (parentId). Author-only edit/delete. Activity logged
     ├── worklogs/           # Time in seconds. Author-only edit/delete. Activity logged
-    ├── settings/           # Key-value JSON store. Keys: app.info, app.email. GET app-info is @Public
-    └── logs/               # @Global. RequestLog persistence + GET /logs (ADMIN) + POST /logs/client (FE ingest). Buffered flush every 2s. @Cron(3AM) retention.
+    ├── settings/           # Key-value JSON store. Keys: app.info, app.email, app.features (feature flags), app.announcement. GET app-info is @Public; GET/PUT /:key is @Roles(ADMIN)
+    ├── logs/               # @Global. RequestLog persistence + GET /logs (ADMIN) + POST /logs/client (FE ingest). Buffered flush every 2s. @Cron(3AM) retention.
+    └── users/              # @Roles(ADMIN). GET /users (list, filter, cursor), PATCH /users/:id/role, DELETE /users/:id — self-modification blocked. Also hosts AdminController for GET /admin/stats (single-transaction counts: users/workspaces/projects/issues + 24h log level breakdown)
 ```
 
 ## Logging & Observability
@@ -81,7 +82,7 @@ src/
 
 ## Environment
 Required: `DATABASE_URL`, `PORT`, `JWT_SECRET`, `CORS_ORIGIN`, `RESEND_API_KEY`, Supabase keys.
-Optional (logging): `SENTRY_DSN` (no-op if missing), `SENTRY_ENV`, `LOG_RETENTION_EXPIRY` (default 30).
+Optional (logging): `SENTRY_DSN` (no-op if missing OR if NODE_ENV !== "production"), `SENTRY_ENV`, `LOG_RETENTION_EXPIRY` (default 30).
 
 ## Things Easy to Get Wrong
 - Response format is ALWAYS `{ message: MSG.SUCCESS.X, ...data }` — never raw data

@@ -14,7 +14,7 @@
 
 ## Sentry
 - ONLY send `status >= 500` to Sentry — 4xx validation failures stay in DB only to preserve free-tier quota
-- NEVER call `Sentry.captureException` outside `SentryService` — the wrapper no-ops gracefully when `SENTRY_DSN` is missing; direct calls crash on unconfigured dev machines
+- NEVER call `Sentry.captureException` outside `SentryService` — the wrapper no-ops gracefully when `SENTRY_DSN` is missing OR when `NODE_ENV !== "production"` (local dev); direct calls crash on unconfigured dev machines
 - ALWAYS store the returned `sentryEventId` on the DB row so admins can cross-link Sentry ↔ local log
 
 ## Endpoints
