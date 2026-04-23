@@ -23,18 +23,19 @@ npm run test            # Jest
 ## Directory Structure
 ```
 src/
-├── main.ts                 # Bootstrap: Helmet, CORS, ValidationPipe (whitelist + transform), Swagger at /api
-├── app.module.ts           # Imports all modules. Global: JwtAuthGuard, RolesGuard, ThrottlerGuard, TimezoneInterceptor
+├── main.ts                 # Bootstrap: Sentry.init (if DSN), Helmet, CORS, ValidationPipe, Swagger at /api
+├── app.module.ts           # Imports all modules. Global: JwtAuthGuard, RolesGuard, ThrottlerGuard, TimezoneInterceptor, RequestLoggerInterceptor, AllExceptionsFilter. ScheduleModule.forRoot() for cron.
 ├── core/
 │   ├── constants/          # ENV, MSG, ENDPOINTS, COOKIE_KEYS, REGEX, SETTING_KEYS, USER_SELECT_BASIC/FULL, BOARD_COLUMN_SELECT
 │   ├── database/           # PrismaService (global module, PG adapter)
 │   ├── decorators/         # @CurrentUser(), @Public(), @Roles()
-│   ├── filters/            # AllExceptionsFilter — catches all, returns {statusCode, message, timestamp}
+│   ├── filters/            # AllExceptionsFilter — @Injectable, logs errors to RequestLog + Sentry (5xx only)
 │   ├── guards/             # JwtAuthGuard (respects @Public), RolesGuard (checks @Roles)
-│   ├── interceptors/       # TimezoneInterceptor — reads x-timezone header, converts all dates in response
+│   ├── interceptors/       # TimezoneInterceptor (x-timezone header), RequestLoggerInterceptor (success path → RequestLog)
 │   ├── mail/               # MailService (Resend API), OTP email template
+│   ├── services/           # SentryService (thin @sentry/nestjs wrapper, no-op if SENTRY_DSN missing)
 │   ├── types/              # AuthUser {id, name, email, emailVerified, image, role, createdAt}
-│   └── utils/              # hashPassword (bcrypt 12 rounds), generateOTP (6-digit), cookieExtractor, timezone conversion
+│   └── utils/              # hashPassword, generateOTP, cookieExtractor, timezone conversion, sanitize (recursive PII masker)
 └── modules/
     ├── auth/               # register → verify-email → login → refresh → logout, forgot/reset password
     ├── workspaces/         # CRUD + members. Roles: OWNER > ADMIN > MEMBER > VIEWER. Exports WorkspacesService
@@ -45,8 +46,18 @@ src/
     ├── labels/             # Project-scoped, unique name per project, default color #6b778c
     ├── comments/           # Threaded (parentId). Author-only edit/delete. Activity logged
     ├── worklogs/           # Time in seconds. Author-only edit/delete. Activity logged
-    └── settings/           # Key-value JSON store. Keys: app.info, app.email. GET app-info is @Public
+    ├── settings/           # Key-value JSON store. Keys: app.info, app.email. GET app-info is @Public
+    └── logs/               # @Global. RequestLog persistence + GET /logs (ADMIN) + POST /logs/client (FE ingest). Buffered flush every 2s. @Cron(3AM) retention.
 ```
+
+## Logging & Observability
+- Every HTTP request → `RequestLog` row (success INFO, 4xx WARN, 5xx ERROR). Source tagged `backend` or `frontend`.
+- `RequestLoggerInterceptor` logs success path; `AllExceptionsFilter` logs errors.
+- Body/query sanitized via `sanitize()` — masks `password`, `token`, `otp`, `refreshToken`, `authorization`, etc.
+- Auth routes (`/auth/login`, `/auth/register`, …) drop `requestBody` entirely.
+- Only `status >= 500` mirrored to Sentry (free-tier friendly). `sentryEventId` stored on row for correlation.
+- `@Cron(EVERY_DAY_AT_3AM)` deletes logs older than `ENV.LOG_RETENTION_EXPIRY` (default 30).
+- In-memory buffer (cap 500); `createMany` every 2s or at 50 entries. Logging NEVER blocks request path.
 
 ## Auth Flow
 1. Register: hash password (bcrypt 12) → create user (emailVerified=null) → OTP → email
@@ -68,6 +79,10 @@ src/
 - All foreign keys cascade on delete
 - Issue.key is globally unique (e.g. PROJ-42), generated atomically via $transaction
 
+## Environment
+Required: `DATABASE_URL`, `PORT`, `JWT_SECRET`, `CORS_ORIGIN`, `RESEND_API_KEY`, Supabase keys.
+Optional (logging): `SENTRY_DSN` (no-op if missing), `SENTRY_ENV`, `LOG_RETENTION_EXPIRY` (default 30).
+
 ## Things Easy to Get Wrong
 - Response format is ALWAYS `{ message: MSG.SUCCESS.X, ...data }` — never raw data
 - Error handling: ALWAYS throw NestJS exceptions — NEVER res.status().json()
@@ -83,3 +98,6 @@ src/
 - PATCH /issues/:id with { sprintId } used by FE backlog DnD to assign/unassign sprints
 - PATCH /issues/:id/move used by FE subtask checkbox to toggle Done/Todo columns
 - PATCH /worklogs/:id used by FE inline worklog edit
+- Logging: NEVER add a new sensitive field to DTOs without also adding its key to `SENSITIVE_KEYS` in `src/core/utils/sanitize.util.ts` — otherwise it will be logged in plaintext
+- Logging: exceptions thrown in `AllExceptionsFilter.safeLog` / `RequestLoggerInterceptor.safeLog` MUST be swallowed — logging failure MUST NOT affect HTTP response
+- Logging: all `GET /logs` / `GET /logs/:id` routes are `@Roles(Role.ADMIN)` — never expose without the decorator

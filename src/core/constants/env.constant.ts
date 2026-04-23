@@ -15,4 +15,7 @@ export const ENV = {
   SUPABASE_URL: process.env.SUPABASE_URL!,
   SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY!,
   SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET!,
+  SENTRY_DSN: process.env.SENTRY_DSN!,
+  SENTRY_ENV: process.env.SENTRY_ENV!,
+  LOG_RETENTION_EXPIRY: parseInt(process.env.LOG_RETENTION_EXPIRY!),
 } as const;

@@ -1,0 +1,33 @@
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+model RequestLog {
+  id            String   @id @default(uuid())
+  level         LogLevel @default(INFO)
+  source        String
+  method        String
+  url           String
+  route         String?
+  statusCode    Int?
+  durationMs    Int?
+  userId        String?
+  userEmail     String?
+  ip            String?
+  userAgent     String?
+  requestBody   Json?
+  requestQuery  Json?
+  responseBody  Json?
+  errorMessage  String?
+  errorStack    String?  @db.Text
+  breadcrumbs   Json?
+  sentryEventId String?
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([level, createdAt])
+  @@index([statusCode])
+}

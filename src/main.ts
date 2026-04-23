@@ -2,11 +2,21 @@ import 'dotenv/config';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as Sentry from '@sentry/nestjs';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { ENV } from '@/core/constants';
-import { AllExceptionsFilter } from '@/core/filters/http-exception.filter';
 import { AppModule } from './app.module';
+
+// Initialize Sentry before Nest bootstrap so all subsequent errors are captured.
+// No-op when SENTRY_DSN is missing.
+if (ENV.SENTRY_DSN) {
+  Sentry.init({
+    dsn: ENV.SENTRY_DSN,
+    environment: ENV.SENTRY_ENV,
+    tracesSampleRate: 0.1,
+  });
+}
 
 const logger = new Logger('Bootstrap');
 
@@ -36,8 +46,7 @@ async function bootstrap() {
     }),
   );
 
-  // Exception filter
-  app.useGlobalFilters(new AllExceptionsFilter());
+  // Exception filter is registered via APP_FILTER in AppModule (needs DI)
 
   // Swagger
   const swaggerConfig = new DocumentBuilder()

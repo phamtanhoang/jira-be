@@ -71,4 +71,9 @@ export const ENDPOINTS = {
     BASE: 'worklogs',
     BY_ID: ':id',
   },
+  LOGS: {
+    BASE: 'logs',
+    BY_ID: ':id',
+    CLIENT: 'client',
+  },
 } as const;

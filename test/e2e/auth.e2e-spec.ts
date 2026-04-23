@@ -16,7 +16,6 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { PrismaService } from '@/core/database/prisma.service';
-import { AllExceptionsFilter } from '@/core/filters/http-exception.filter';
 import { MailService } from '@/core/mail/mail.service';
 import { AppModule } from '../../src/app.module';
 
@@ -51,7 +50,7 @@ describe('Auth (e2e)', () => {
         transform: true,
       }),
     );
-    app.useGlobalFilters(new AllExceptionsFilter());
+    // Global filter is registered via APP_FILTER in AppModule — no manual setup
 
     await app.init();
 
