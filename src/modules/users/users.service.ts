@@ -68,6 +68,39 @@ export class UsersService {
     return { message: MSG.SUCCESS.USER_DELETED };
   }
 
+  /**
+   * List active refresh-token sessions for a user. "Active" = not yet
+   * expired. The `token` value itself is never returned — only metadata.
+   */
+  async listSessions(userId: string) {
+    await this.assertExists(userId);
+    const data = await this.prisma.refreshToken.findMany({
+      where: { userId, expiresAt: { gt: new Date() } },
+      select: { id: true, createdAt: true, expiresAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return { data };
+  }
+
+  async revokeSession(userId: string, tokenId: string) {
+    await this.assertExists(userId);
+    const token = await this.prisma.refreshToken.findUnique({
+      where: { id: tokenId },
+      select: { id: true, userId: true },
+    });
+    if (!token || token.userId !== userId) {
+      throw new NotFoundException(MSG.ERROR.REFRESH_TOKEN_NOT_FOUND);
+    }
+    await this.prisma.refreshToken.delete({ where: { id: tokenId } });
+    return { message: MSG.SUCCESS.SESSION_REVOKED };
+  }
+
+  async revokeAllSessions(userId: string) {
+    await this.assertExists(userId);
+    await this.prisma.refreshToken.deleteMany({ where: { userId } });
+    return { message: MSG.SUCCESS.SESSIONS_REVOKED };
+  }
+
   private async assertExists(id: string) {
     const exists = await this.prisma.user.findUnique({
       where: { id },

@@ -28,6 +28,17 @@ export class SettingsService {
     return setting?.value ?? null;
   }
 
+  /**
+   * Public snapshot of the maintenance flag. Returns `null` when the setting
+   * is missing so the FE middleware can treat that as "not in maintenance".
+   */
+  async getAppMaintenance() {
+    const setting = await this.prisma.setting.findUnique({
+      where: { key: SETTING_KEYS.APP_MAINTENANCE },
+    });
+    return setting?.value ?? null;
+  }
+
   async getByKey(key: string) {
     const setting = await this.prisma.setting.findUnique({ where: { key } });
     if (!setting) throw new NotFoundException(MSG.ERROR.SETTING_NOT_FOUND);

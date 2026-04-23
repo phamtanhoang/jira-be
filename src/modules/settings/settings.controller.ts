@@ -29,6 +29,15 @@ export class SettingsController {
     return this.settingsService.getAppAnnouncement();
   }
 
+  @Public()
+  @Get(E.APP_MAINTENANCE)
+  @ApiOperation({
+    summary: 'Get the maintenance-mode flag (null if not configured)',
+  })
+  getAppMaintenance() {
+    return this.settingsService.getAppMaintenance();
+  }
+
   @Get(E.BY_KEY)
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Get a setting by key (Admin only)' })

@@ -14,6 +14,7 @@ export const ENDPOINTS = {
     BASE: 'settings',
     APP_INFO: 'app-info',
     APP_ANNOUNCEMENT: 'app-announcement',
+    APP_MAINTENANCE: 'app-maintenance',
     BY_KEY: ':key',
   },
   WORKSPACES: {
@@ -81,9 +82,15 @@ export const ENDPOINTS = {
     BASE: 'users',
     BY_ID: ':id',
     ROLE: ':id/role',
+    SESSIONS: ':id/sessions',
+    SESSION_BY_ID: ':id/sessions/:tokenId',
   },
   ADMIN: {
     BASE: 'admin',
     STATS: 'stats',
+    ANALYTICS: 'analytics',
+    METRICS: 'metrics',
+    WORKSPACES: 'workspaces',
+    WORKSPACE_BY_ID: 'workspaces/:id',
   },
 } as const;
