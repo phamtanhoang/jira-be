@@ -14,6 +14,7 @@ import { AttachmentsModule } from '@/modules/attachments/attachments.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { BoardsModule } from '@/modules/boards/boards.module';
 import { CommentsModule } from '@/modules/comments/comments.module';
+import { DebugModule } from '@/modules/debug/debug.module';
 import { IssuesModule } from '@/modules/issues/issues.module';
 import { LabelsModule } from '@/modules/labels/labels.module';
 import { LogsModule } from '@/modules/logs/logs.module';
@@ -40,6 +41,7 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     CommentsModule,
     WorklogsModule,
     AttachmentsModule,
+    DebugModule,
   ],
   providers: [
     SentryService,
