@@ -20,6 +20,15 @@ export class SettingsController {
     return this.settingsService.getAppInfo();
   }
 
+  @Public()
+  @Get(E.APP_ANNOUNCEMENT)
+  @ApiOperation({
+    summary: 'Get the announcement banner (null if not configured)',
+  })
+  getAppAnnouncement() {
+    return this.settingsService.getAppAnnouncement();
+  }
+
   @Get(E.BY_KEY)
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Get a setting by key (Admin only)' })

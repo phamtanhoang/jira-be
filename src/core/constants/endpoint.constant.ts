@@ -13,6 +13,7 @@ export const ENDPOINTS = {
   SETTINGS: {
     BASE: 'settings',
     APP_INFO: 'app-info',
+    APP_ANNOUNCEMENT: 'app-announcement',
     BY_KEY: ':key',
   },
   WORKSPACES: {
