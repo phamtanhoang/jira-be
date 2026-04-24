@@ -4,18 +4,17 @@ import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import {
   assertExists,
+  assertProjectAccess,
   uploadFile,
   deleteFile,
   createSignedUrl,
 } from '@/core/utils';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
-import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 
 @Injectable()
 export class AttachmentsService {
   constructor(
     private prisma: PrismaService,
-    private workspacesService: WorkspacesService,
     private audit: AdminAuditService,
   ) {}
 
@@ -27,13 +26,15 @@ export class AttachmentsService {
     const issue = assertExists(
       await this.prisma.issue.findUnique({
         where: { id: issueId },
-        include: { project: { select: { workspaceId: true } } },
+        include: { project: { select: { id: true, workspaceId: true } } },
       }),
       MSG.ERROR.ISSUE_NOT_FOUND,
     );
 
-    await this.workspacesService.assertMember(
+    await assertProjectAccess(
+      this.prisma,
       issue.project.workspaceId,
+      issue.project.id,
       userId,
     );
 
@@ -81,13 +82,15 @@ export class AttachmentsService {
     const issue = assertExists(
       await this.prisma.issue.findUnique({
         where: { id: issueId },
-        include: { project: { select: { workspaceId: true } } },
+        include: { project: { select: { id: true, workspaceId: true } } },
       }),
       MSG.ERROR.ISSUE_NOT_FOUND,
     );
 
-    await this.workspacesService.assertMember(
+    await assertProjectAccess(
+      this.prisma,
       issue.project.workspaceId,
+      issue.project.id,
       userId,
     );
 
@@ -113,14 +116,18 @@ export class AttachmentsService {
       await this.prisma.attachment.findUnique({
         where: { id: attachmentId },
         include: {
-          issue: { include: { project: { select: { workspaceId: true } } } },
+          issue: {
+            include: { project: { select: { id: true, workspaceId: true } } },
+          },
         },
       }),
       MSG.ERROR.ATTACHMENT_NOT_FOUND,
     );
 
-    await this.workspacesService.assertMember(
+    await assertProjectAccess(
+      this.prisma,
       attachment.issue.project.workspaceId,
+      attachment.issue.project.id,
       userId,
     );
 

@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ProjectType, StatusCategory } from '@prisma/client';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
+import { assertProjectAccess } from '@/core/utils';
 import { CreateColumnDto, UpdateColumnDto, ReorderColumnsDto } from './dto';
 
 const DEFAULT_COLUMNS = [
@@ -13,10 +13,7 @@ const DEFAULT_COLUMNS = [
 
 @Injectable()
 export class BoardsService {
-  constructor(
-    private prisma: PrismaService,
-    private workspacesService: WorkspacesService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   async createDefaultBoard(
     projectId: string,
@@ -40,7 +37,12 @@ export class BoardsService {
     });
     if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
 
-    await this.workspacesService.assertMember(project.workspaceId, userId);
+    await assertProjectAccess(
+      this.prisma,
+      project.workspaceId,
+      project.id,
+      userId,
+    );
 
     return this.prisma.board.findUnique({
       where: { projectId },
@@ -148,12 +150,14 @@ export class BoardsService {
   private async assertBoardAccess(boardId: string, userId: string) {
     const board = await this.prisma.board.findUnique({
       where: { id: boardId },
-      include: { project: { select: { workspaceId: true } } },
+      include: { project: { select: { id: true, workspaceId: true } } },
     });
     if (!board) throw new NotFoundException(MSG.ERROR.BOARD_NOT_FOUND);
 
-    await this.workspacesService.assertMember(
+    await assertProjectAccess(
+      this.prisma,
       board.project.workspaceId,
+      board.project.id,
       userId,
     );
     return board;

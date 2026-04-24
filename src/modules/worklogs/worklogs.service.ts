@@ -6,6 +6,7 @@ import {
 import { ActivityAction } from '@prisma/client';
 import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { assertProjectAccess } from '@/core/utils';
 import { CreateWorklogDto, UpdateWorklogDto } from './dto';
 
 @Injectable()
@@ -15,8 +16,15 @@ export class WorklogsService {
   async create(issueId: string, userId: string, dto: CreateWorklogDto) {
     const issue = await this.prisma.issue.findUnique({
       where: { id: issueId },
+      include: { project: { select: { id: true, workspaceId: true } } },
     });
     if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
+    await assertProjectAccess(
+      this.prisma,
+      issue.project.workspaceId,
+      issue.project.id,
+      userId,
+    );
 
     const worklog = await this.prisma.worklog.create({
       data: {
@@ -41,7 +49,19 @@ export class WorklogsService {
     return worklog;
   }
 
-  async findByIssue(issueId: string) {
+  async findByIssue(issueId: string, userId: string) {
+    const issue = await this.prisma.issue.findUnique({
+      where: { id: issueId },
+      include: { project: { select: { id: true, workspaceId: true } } },
+    });
+    if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
+    await assertProjectAccess(
+      this.prisma,
+      issue.project.workspaceId,
+      issue.project.id,
+      userId,
+    );
+
     return this.prisma.worklog.findMany({
       where: { issueId },
       include: { user: USER_SELECT_BASIC },

@@ -32,8 +32,8 @@ export class CommentsController {
 
   @Get(ENDPOINTS.ISSUES.COMMENTS)
   @ApiOperation({ summary: 'List comments on issue (threaded)' })
-  findAll(@Param('id') issueId: string) {
-    return this.commentsService.findByIssue(issueId);
+  findAll(@Param('id') issueId: string, @CurrentUser() user: AuthUser) {
+    return this.commentsService.findByIssue(issueId, user.id);
   }
 }
 

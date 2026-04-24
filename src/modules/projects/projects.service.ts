@@ -7,10 +7,17 @@ import {
 import { ProjectRole, WorkspaceRole } from '@prisma/client';
 import { MSG, USER_SELECT_FULL } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { assertProjectAccess } from '@/core/utils';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { BoardsService } from '@/modules/boards/boards.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
-import { AddProjectMemberDto, CreateProjectDto, UpdateProjectDto } from './dto';
+import {
+  AddProjectMemberDto,
+  BulkAddProjectMembersDto,
+  CreateProjectDto,
+  UpdateProjectDto,
+  UpdateProjectMemberDto,
+} from './dto';
 
 @Injectable()
 export class ProjectsService {
@@ -104,9 +111,9 @@ export class ProjectsService {
   }
 
   /**
-   * Visibility gate used by projects AND downstream resources (issues, etc.).
-   * Workspace OWNER/ADMIN bypass project membership; otherwise the user must
-   * be a ProjectMember row.
+   * Thin wrapper around the standalone `assertProjectAccess` util. Kept on
+   * the service for modules that already depend on ProjectsService (issues)
+   * so they don't need a separate import.
    */
   async assertProjectAccess(
     projectId: string,
@@ -122,21 +129,7 @@ export class ProjectsService {
       if (!p) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
       wsId = p.workspaceId;
     }
-
-    const wsMember = await this.workspacesService.assertMember(wsId, userId);
-    if (
-      wsMember.role === WorkspaceRole.OWNER ||
-      wsMember.role === WorkspaceRole.ADMIN
-    ) {
-      return;
-    }
-
-    const projectMember = await this.prisma.projectMember.findUnique({
-      where: { projectId_userId: { projectId, userId } },
-    });
-    if (!projectMember) {
-      throw new ForbiddenException(MSG.ERROR.NOT_PROJECT_MEMBER);
-    }
+    await assertProjectAccess(this.prisma, wsId, projectId, userId);
   }
 
   async update(projectId: string, userId: string, dto: UpdateProjectDto) {
@@ -211,6 +204,104 @@ export class ProjectsService {
         userId: targetUser.id,
         role: dto.role ?? ProjectRole.DEVELOPER,
       },
+      include: { user: USER_SELECT_FULL },
+    });
+  }
+
+  /**
+   * Add multiple workspace members to a project in one shot. Skips users who
+   * are not workspace members (security boundary) and users already on the
+   * project (idempotent). Returns the freshly-created member rows.
+   */
+  async bulkAddMembers(
+    projectId: string,
+    userId: string,
+    dto: BulkAddProjectMembersDto,
+  ) {
+    const project = await this.findById(projectId, userId);
+    await this.assertRole(projectId, userId, [
+      ProjectRole.LEAD,
+      ProjectRole.ADMIN,
+    ]);
+
+    const [wsMembers, existing] = await Promise.all([
+      this.prisma.workspaceMember.findMany({
+        where: {
+          workspaceId: project.workspaceId,
+          userId: { in: dto.userIds },
+        },
+        select: { userId: true },
+      }),
+      this.prisma.projectMember.findMany({
+        where: { projectId, userId: { in: dto.userIds } },
+        select: { userId: true },
+      }),
+    ]);
+
+    const wsMemberIds = new Set(wsMembers.map((m) => m.userId));
+    const alreadyOnProject = new Set(existing.map((m) => m.userId));
+
+    const toAdd = dto.userIds.filter(
+      (id) => wsMemberIds.has(id) && !alreadyOnProject.has(id),
+    );
+
+    if (toAdd.length === 0) {
+      return { added: 0, skipped: dto.userIds.length };
+    }
+
+    await this.prisma.projectMember.createMany({
+      data: toAdd.map((uid) => ({
+        projectId,
+        userId: uid,
+        role: dto.role ?? ProjectRole.DEVELOPER,
+      })),
+    });
+
+    const added = await this.prisma.projectMember.findMany({
+      where: { projectId, userId: { in: toAdd } },
+      include: { user: USER_SELECT_FULL },
+    });
+
+    return {
+      added: added.length,
+      skipped: dto.userIds.length - added.length,
+      members: added,
+    };
+  }
+
+  async listMembers(projectId: string, userId: string) {
+    await this.assertProjectAccess(projectId, userId);
+    return this.prisma.projectMember.findMany({
+      where: { projectId },
+      include: { user: USER_SELECT_FULL },
+      orderBy: { joinedAt: 'asc' },
+    });
+  }
+
+  async updateMemberRole(
+    projectId: string,
+    memberId: string,
+    userId: string,
+    dto: UpdateProjectMemberDto,
+  ) {
+    await this.assertRole(projectId, userId, [
+      ProjectRole.LEAD,
+      ProjectRole.ADMIN,
+    ]);
+
+    const member = await this.prisma.projectMember.findUnique({
+      where: { id: memberId },
+    });
+    if (!member || member.projectId !== projectId) {
+      throw new NotFoundException(MSG.ERROR.NOT_PROJECT_MEMBER);
+    }
+    if (member.role === ProjectRole.LEAD) {
+      throw new ForbiddenException(MSG.ERROR.CANNOT_REMOVE_OWNER);
+    }
+
+    return this.prisma.projectMember.update({
+      where: { id: memberId },
+      data: { role: dto.role },
       include: { user: USER_SELECT_FULL },
     });
   }

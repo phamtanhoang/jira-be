@@ -32,8 +32,8 @@ export class WorklogsIssueController {
 
   @Get(ENDPOINTS.ISSUES.WORKLOGS)
   @ApiOperation({ summary: 'List worklogs for issue' })
-  findAll(@Param('id') issueId: string) {
-    return this.worklogsService.findByIssue(issueId);
+  findAll(@Param('id') issueId: string, @CurrentUser() user: AuthUser) {
+    return this.worklogsService.findByIssue(issueId, user.id);
   }
 }
 

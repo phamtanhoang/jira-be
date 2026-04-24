@@ -5,15 +5,12 @@ import {
 } from '@nestjs/common';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
+import { assertProjectAccess } from '@/core/utils';
 import { CreateLabelDto } from './dto';
 
 @Injectable()
 export class LabelsService {
-  constructor(
-    private prisma: PrismaService,
-    private workspacesService: WorkspacesService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   async create(userId: string, dto: CreateLabelDto) {
     const project = await this.prisma.project.findUnique({
@@ -21,7 +18,12 @@ export class LabelsService {
     });
     if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
 
-    await this.workspacesService.assertMember(project.workspaceId, userId);
+    await assertProjectAccess(
+      this.prisma,
+      project.workspaceId,
+      project.id,
+      userId,
+    );
 
     const existing = await this.prisma.label.findUnique({
       where: { projectId_name: { projectId: dto.projectId, name: dto.name } },
@@ -39,7 +41,12 @@ export class LabelsService {
     });
     if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
 
-    await this.workspacesService.assertMember(project.workspaceId, userId);
+    await assertProjectAccess(
+      this.prisma,
+      project.workspaceId,
+      project.id,
+      userId,
+    );
 
     return this.prisma.label.findMany({
       where: { projectId },
@@ -51,12 +58,14 @@ export class LabelsService {
   async delete(labelId: string, userId: string) {
     const label = await this.prisma.label.findUnique({
       where: { id: labelId },
-      include: { project: { select: { workspaceId: true } } },
+      include: { project: { select: { id: true, workspaceId: true } } },
     });
     if (!label) throw new NotFoundException(MSG.ERROR.LABEL_NOT_FOUND);
 
-    await this.workspacesService.assertMember(
+    await assertProjectAccess(
+      this.prisma,
       label.project.workspaceId,
+      label.project.id,
       userId,
     );
 

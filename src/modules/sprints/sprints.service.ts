@@ -6,15 +6,12 @@ import {
 import { SprintStatus, StatusCategory } from '@prisma/client';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
+import { assertProjectAccess } from '@/core/utils';
 import { CreateSprintDto, UpdateSprintDto } from './dto';
 
 @Injectable()
 export class SprintsService {
-  constructor(
-    private prisma: PrismaService,
-    private workspacesService: WorkspacesService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   async create(userId: string, dto: CreateSprintDto) {
     await this.assertBoardAccess(dto.boardId, userId);
@@ -173,12 +170,14 @@ export class SprintsService {
   private async assertBoardAccess(boardId: string, userId: string) {
     const board = await this.prisma.board.findUnique({
       where: { id: boardId },
-      include: { project: { select: { workspaceId: true } } },
+      include: { project: { select: { id: true, workspaceId: true } } },
     });
     if (!board) throw new NotFoundException(MSG.ERROR.BOARD_NOT_FOUND);
 
-    await this.workspacesService.assertMember(
+    await assertProjectAccess(
+      this.prisma,
       board.project.workspaceId,
+      board.project.id,
       userId,
     );
     return board;

@@ -12,7 +12,13 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ENDPOINTS, MSG } from '@/core/constants';
 import { CurrentUser } from '@/core/decorators';
 import { AuthUser } from '@/core/types';
-import { AddProjectMemberDto, CreateProjectDto, UpdateProjectDto } from './dto';
+import {
+  AddProjectMemberDto,
+  BulkAddProjectMembersDto,
+  CreateProjectDto,
+  UpdateProjectDto,
+  UpdateProjectMemberDto,
+} from './dto';
 import { ProjectsService } from './projects.service';
 
 const E = ENDPOINTS.PROJECTS;
@@ -64,6 +70,29 @@ export class ProjectsController {
 
   // ─── Members ──────────────────────────────────────────
 
+  @Get(`${E.BY_ID}/${E.MEMBERS}`)
+  @ApiOperation({ summary: 'List project members' })
+  listMembers(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.projectsService.listMembers(id, user.id);
+  }
+
+  @Patch(`${E.BY_ID}/${E.MEMBER_BY_ID}`)
+  @ApiOperation({ summary: 'Update project member role (Lead/Admin)' })
+  async updateMemberRole(
+    @Param('id') id: string,
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdateProjectMemberDto,
+  ) {
+    const member = await this.projectsService.updateMemberRole(
+      id,
+      memberId,
+      user.id,
+      dto,
+    );
+    return { message: MSG.SUCCESS.MEMBER_UPDATED, member };
+  }
+
   @Post(`${E.BY_ID}/${E.MEMBERS}`)
   @ApiOperation({ summary: 'Add member to project (Lead/Admin)' })
   async addMember(
@@ -73,6 +102,19 @@ export class ProjectsController {
   ) {
     const member = await this.projectsService.addMember(id, user.id, dto);
     return { message: MSG.SUCCESS.MEMBER_ADDED, member };
+  }
+
+  @Post(`${E.BY_ID}/${E.MEMBERS}/bulk`)
+  @ApiOperation({
+    summary: 'Add multiple workspace members to project (Lead/Admin)',
+  })
+  async bulkAddMembers(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: BulkAddProjectMembersDto,
+  ) {
+    const result = await this.projectsService.bulkAddMembers(id, user.id, dto);
+    return { message: MSG.SUCCESS.MEMBER_ADDED, ...result };
   }
 
   @Delete(`${E.BY_ID}/${E.MEMBER_BY_ID}`)
