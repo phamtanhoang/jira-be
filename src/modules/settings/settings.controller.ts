@@ -35,7 +35,11 @@ export class SettingsController {
   // fresh one is fetched in the background.
   @Public()
   @Get(E.APP_INFO)
-  @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+  // App branding must propagate quickly after admin edits — do NOT use
+  // `public` cache (CDN + shared caches would serve stale across sessions).
+  // `private, max-age=30` lets the browser cache for 30s on its own session
+  // only; next tab / incognito always revalidates from origin.
+  @Header('Cache-Control', 'private, max-age=30, must-revalidate')
   @ApiOperation({ summary: 'Get app info (name, logo, description)' })
   getAppInfo() {
     return this.settingsService.getAppInfo();
@@ -43,7 +47,7 @@ export class SettingsController {
 
   @Public()
   @Get(E.APP_ANNOUNCEMENT)
-  @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+  @Header('Cache-Control', 'private, max-age=30, must-revalidate')
   @ApiOperation({
     summary: 'Get the announcement banner (null if not configured)',
   })
@@ -53,7 +57,7 @@ export class SettingsController {
 
   @Public()
   @Get(E.APP_MAINTENANCE)
-  @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+  @Header('Cache-Control', 'private, max-age=30, must-revalidate')
   @ApiOperation({
     summary: 'Get the maintenance-mode flag (null if not configured)',
   })

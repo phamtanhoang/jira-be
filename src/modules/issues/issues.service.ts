@@ -5,9 +5,11 @@ import {
   IssuePriority,
   Prisma,
   StatusCategory,
+  WorkspaceRole,
 } from '@prisma/client';
 import { MSG, USER_SELECT_BASIC, BOARD_COLUMN_SELECT } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { ProjectsService } from '@/modules/projects/projects.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import { CreateIssueDto, UpdateIssueDto, MoveIssueDto } from './dto';
 
@@ -29,6 +31,7 @@ export class IssuesService {
   constructor(
     private prisma: PrismaService,
     private workspacesService: WorkspacesService,
+    private projectsService: ProjectsService,
   ) {}
 
   async create(userId: string, dto: CreateIssueDto) {
@@ -42,7 +45,11 @@ export class IssuesService {
     });
     if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
 
-    await this.workspacesService.assertMember(project.workspaceId, userId);
+    await this.projectsService.assertProjectAccess(
+      project.id,
+      userId,
+      project.workspaceId,
+    );
 
     // Default to first column (To Do)
     const firstColumnId = project.board?.columns[0]?.id;
@@ -105,7 +112,11 @@ export class IssuesService {
     });
     if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
 
-    await this.workspacesService.assertMember(project.workspaceId, userId);
+    await this.projectsService.assertProjectAccess(
+      project.id,
+      userId,
+      project.workspaceId,
+    );
 
     const where = {
       projectId,
@@ -188,12 +199,26 @@ export class IssuesService {
         },
         orderBy: [{ dueDate: 'asc' }, { updatedAt: 'desc' }],
       }),
-      // Recently-touched issues across projects I can access
+      // Recently-touched issues across projects I can access. Workspace
+      // OWNER/ADMIN see all projects; regular members see only projects they
+      // are a member of.
       this.prisma.issue.findMany({
         where: {
           updatedAt: { gte: recentActivityCutoff },
           project: {
-            workspace: { members: { some: { userId } } },
+            OR: [
+              { members: { some: { userId } } },
+              {
+                workspace: {
+                  members: {
+                    some: {
+                      userId,
+                      role: { in: [WorkspaceRole.OWNER, WorkspaceRole.ADMIN] },
+                    },
+                  },
+                },
+              },
+            ],
           },
         },
         include: ISSUE_INCLUDE,
@@ -245,10 +270,7 @@ export class IssuesService {
     });
     if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
 
-    const project = await this.prisma.project.findUnique({
-      where: { id: issue.projectId },
-    });
-    await this.workspacesService.assertMember(project!.workspaceId, userId);
+    await this.projectsService.assertProjectAccess(issue.projectId, userId);
 
     return issue;
   }
@@ -260,10 +282,7 @@ export class IssuesService {
     });
     if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
 
-    const project = await this.prisma.project.findUnique({
-      where: { id: issue.projectId },
-    });
-    await this.workspacesService.assertMember(project!.workspaceId, userId);
+    await this.projectsService.assertProjectAccess(issue.projectId, userId);
 
     return issue;
   }

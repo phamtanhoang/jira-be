@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ProjectRole } from '@prisma/client';
+import { ProjectRole, WorkspaceRole } from '@prisma/client';
 import { MSG, USER_SELECT_FULL } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
@@ -61,10 +61,22 @@ export class ProjectsService {
   }
 
   async findAllByWorkspace(workspaceId: string, userId: string) {
-    await this.workspacesService.assertMember(workspaceId, userId);
+    const wsMember = await this.workspacesService.assertMember(
+      workspaceId,
+      userId,
+    );
+
+    // Workspace OWNER/ADMIN see everything. Other roles (MEMBER/VIEWER) see only
+    // projects they are a member of.
+    const isWorkspaceAdmin =
+      wsMember.role === WorkspaceRole.OWNER ||
+      wsMember.role === WorkspaceRole.ADMIN;
 
     return this.prisma.project.findMany({
-      where: { workspaceId },
+      where: {
+        workspaceId,
+        ...(isWorkspaceAdmin ? {} : { members: { some: { userId } } }),
+      },
       include: {
         lead: USER_SELECT_FULL,
         _count: { select: { members: true } },
@@ -86,9 +98,45 @@ export class ProjectsService {
     });
     if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
 
-    await this.workspacesService.assertMember(project.workspaceId, userId);
+    await this.assertProjectAccess(project.id, userId, project.workspaceId);
 
     return project;
+  }
+
+  /**
+   * Visibility gate used by projects AND downstream resources (issues, etc.).
+   * Workspace OWNER/ADMIN bypass project membership; otherwise the user must
+   * be a ProjectMember row.
+   */
+  async assertProjectAccess(
+    projectId: string,
+    userId: string,
+    workspaceId?: string,
+  ) {
+    let wsId = workspaceId;
+    if (!wsId) {
+      const p = await this.prisma.project.findUnique({
+        where: { id: projectId },
+        select: { workspaceId: true },
+      });
+      if (!p) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
+      wsId = p.workspaceId;
+    }
+
+    const wsMember = await this.workspacesService.assertMember(wsId, userId);
+    if (
+      wsMember.role === WorkspaceRole.OWNER ||
+      wsMember.role === WorkspaceRole.ADMIN
+    ) {
+      return;
+    }
+
+    const projectMember = await this.prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId } },
+    });
+    if (!projectMember) {
+      throw new ForbiddenException(MSG.ERROR.NOT_PROJECT_MEMBER);
+    }
   }
 
   async update(projectId: string, userId: string, dto: UpdateProjectDto) {
