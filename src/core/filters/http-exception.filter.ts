@@ -15,6 +15,7 @@ import { AuthUser } from '@/core/types';
 import {
   sanitize,
   shouldDropRequestBody,
+  shouldSkipLogging,
   TIMEZONE_HEADER,
   convertDateToTimezone,
   resolveTimezone,
@@ -72,6 +73,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
   ) {
     try {
       const url = request.originalUrl || request.url;
+
+      // Same skip policy as the success path: expected 4xx on auth-probe
+      // routes shouldn't pollute the log. 5xx is always kept.
+      if (shouldSkipLogging(request.method, url, status)) {
+        return;
+      }
+
       const user = request.user;
       const errorMessage =
         exception instanceof Error ? exception.message : String(exception);

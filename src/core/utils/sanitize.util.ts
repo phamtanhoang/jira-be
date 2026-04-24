@@ -85,15 +85,41 @@ export const LOG_SKIP_GET_ROUTES = [
   '/admin/analytics',
   '/admin/metrics',
   '/logs/client',
+  // Admin-view routes: logging these creates recursion (admin opens log page
+  // → page fetch gets logged → admin sees their own fetch next visit).
+  '/logs',
+  '/admin/audit',
 ];
+
+/**
+ * Routes where 4xx is expected control-flow, not an actual error worth
+ * surfacing in the request log. Example: `/auth/refresh` returns 401 every
+ * time a refresh token expires — that's the normal logout path, not an
+ * incident. Same for `/auth/me` probes from unauthenticated tabs.
+ *
+ * 5xx on these routes is still logged — those ARE incidents.
+ */
+export const LOG_SKIP_4XX_ROUTES = ['/auth/me', '/auth/refresh'];
 
 export function shouldSkipLogging(
   method: string,
   url: string,
   statusCode: number,
 ): boolean {
-  // Always log failures — they are the whole point of logging.
+  // 5xx always logged — server errors are the whole point of logging.
+  if (statusCode >= 500) return false;
+
+  // 4xx on auth-probe routes is expected flow, not noise worth persisting.
+  if (
+    statusCode >= 400 &&
+    LOG_SKIP_4XX_ROUTES.some((route) => url.startsWith(route))
+  ) {
+    return true;
+  }
+
+  // Other 4xx stays logged — useful for spotting bad client behaviour.
   if (statusCode >= 400) return false;
+
   if (method.toUpperCase() !== 'GET') return false;
   return LOG_SKIP_GET_ROUTES.some((route) => url.startsWith(route));
 }

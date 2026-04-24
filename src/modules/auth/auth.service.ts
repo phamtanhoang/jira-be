@@ -17,6 +17,7 @@ import {
   uploadFile,
   validatePassword,
 } from '@/core/utils';
+import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import {
   ChangePasswordDto,
   ForgotPasswordDto,
@@ -41,6 +42,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private mail: MailService,
+    private audit: AdminAuditService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -331,6 +333,16 @@ export class AuthService {
         // Ignore — stale avatar cleanup shouldn't fail the upload
       }
     }
+
+    this.audit.log(userId, 'AVATAR_UPDATE', {
+      target: userId,
+      targetType: 'User',
+      payload: {
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+      },
+    });
 
     return { message: MSG.SUCCESS.AVATAR_UPLOADED, user };
   }

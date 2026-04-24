@@ -87,6 +87,12 @@ export class LogsService implements OnModuleInit, OnModuleDestroy {
         mode: Prisma.QueryMode.insensitive,
       };
     }
+    if (query.excludeUserId) {
+      where.userId = { not: query.excludeUserId };
+    }
+    if (query.errorsOnly) {
+      where.statusCode = { gte: 400 };
+    }
     if (query.search) {
       where.url = {
         contains: query.search,

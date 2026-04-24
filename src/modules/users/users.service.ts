@@ -54,7 +54,12 @@ export class UsersService {
     if (id === currentUserId) {
       throw new ForbiddenException(MSG.ERROR.CANNOT_MODIFY_SELF);
     }
-    await this.assertExists(id);
+    const before = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true, email: true, role: true },
+    });
+    if (!before) throw new NotFoundException(MSG.ERROR.USER_NOT_FOUND);
+
     const user = await this.prisma.user.update({
       where: { id },
       data: { role },
@@ -63,7 +68,12 @@ export class UsersService {
     this.audit.log(currentUserId, 'ROLE_CHANGE', {
       target: id,
       targetType: 'User',
-      payload: { role },
+      payload: {
+        from: before.role,
+        to: role,
+        targetName: before.name,
+        targetEmail: before.email,
+      },
     });
     return { message: MSG.SUCCESS.USER_ROLE_UPDATED, user };
   }
@@ -72,11 +82,17 @@ export class UsersService {
     if (id === currentUserId) {
       throw new ForbiddenException(MSG.ERROR.CANNOT_MODIFY_SELF);
     }
-    await this.assertExists(id);
+    const before = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true, email: true },
+    });
+    if (!before) throw new NotFoundException(MSG.ERROR.USER_NOT_FOUND);
+
     await this.prisma.user.delete({ where: { id } });
     this.audit.log(currentUserId, 'USER_DELETE', {
       target: id,
       targetType: 'User',
+      payload: { targetName: before.name, targetEmail: before.email },
     });
     return { message: MSG.SUCCESS.USER_DELETED };
   }

@@ -7,6 +7,7 @@ import {
 import { ProjectRole } from '@prisma/client';
 import { MSG, USER_SELECT_FULL } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { BoardsService } from '@/modules/boards/boards.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import { AddProjectMemberDto, CreateProjectDto, UpdateProjectDto } from './dto';
@@ -17,6 +18,7 @@ export class ProjectsService {
     private prisma: PrismaService,
     private workspacesService: WorkspacesService,
     private boardsService: BoardsService,
+    private audit: AdminAuditService,
   ) {}
 
   async create(userId: string, dto: CreateProjectDto) {
@@ -114,7 +116,19 @@ export class ProjectsService {
     const project = await this.findById(projectId, userId);
     await this.assertRole(projectId, userId, [ProjectRole.LEAD]);
 
-    return this.prisma.project.delete({ where: { id: project.id } });
+    const deleted = await this.prisma.project.delete({
+      where: { id: project.id },
+    });
+    this.audit.log(userId, 'PROJECT_DELETE', {
+      target: project.id,
+      targetType: 'Project',
+      payload: {
+        targetName: project.name,
+        targetKey: project.key,
+        workspaceId: project.workspaceId,
+      },
+    });
+    return deleted;
   }
 
   // ─── Members ──────────────────────────────────────────

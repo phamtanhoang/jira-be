@@ -7,6 +7,7 @@ import { ActivityAction } from '@prisma/client';
 import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { uploadFile, deleteFile, createSignedUrl } from '@/core/utils';
+import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 
 @Injectable()
@@ -14,6 +15,7 @@ export class AttachmentsService {
   constructor(
     private prisma: PrismaService,
     private workspacesService: WorkspacesService,
+    private audit: AdminAuditService,
   ) {}
 
   async uploadMany(
@@ -138,6 +140,19 @@ export class AttachmentsService {
 
     await deleteFile(attachment.fileUrl);
 
-    return this.prisma.attachment.delete({ where: { id: attachmentId } });
+    const result = await this.prisma.attachment.delete({
+      where: { id: attachmentId },
+    });
+    this.audit.log(userId, 'ATTACHMENT_DELETE', {
+      target: attachmentId,
+      targetType: 'Attachment',
+      payload: {
+        fileName: attachment.fileName,
+        mimeType: attachment.mimeType,
+        fileSize: attachment.fileSize,
+        issueId: attachment.issueId,
+      },
+    });
+    return result;
   }
 }

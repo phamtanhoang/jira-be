@@ -1,7 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { LogLevel } from '@prisma/client';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsISO8601,
@@ -32,6 +33,21 @@ export class QueryLogsDto {
   @IsOptional()
   @IsString()
   userEmail?: string;
+
+  @ApiPropertyOptional({ description: 'Exclude logs from this user ID.' })
+  @IsOptional()
+  @IsString()
+  excludeUserId?: string;
+
+  @ApiPropertyOptional({
+    description: 'When true, return only rows with statusCode >= 400.',
+  })
+  @IsOptional()
+  @Transform(
+    ({ value }: { value: unknown }) => value === 'true' || value === true,
+  )
+  @IsBoolean()
+  errorsOnly?: boolean;
 
   @ApiPropertyOptional({ description: 'Free-text search on url' })
   @IsOptional()
