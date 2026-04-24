@@ -384,12 +384,81 @@ export class IssuesService {
   async findActivity(issueId: string, userId: string) {
     await this.findById(issueId, userId);
 
-    return this.prisma.activity.findMany({
+    const rows = await this.prisma.activity.findMany({
       where: { issueId },
       include: { user: USER_SELECT_BASIC },
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
+
+    // Field → kind of entity referenced by oldValue/newValue. We resolve these
+    // lazily so the activity feed can show "Alice" instead of a raw UUID even
+    // when the user was later renamed.
+    const USER_FIELDS = new Set(['assigneeId', 'reporterId']);
+    const SPRINT_FIELDS = new Set(['sprintId']);
+    const ISSUE_FIELDS = new Set(['parentId', 'epicId']);
+
+    const userIds = new Set<string>();
+    const sprintIds = new Set<string>();
+    const issueIds = new Set<string>();
+
+    for (const r of rows) {
+      const field = r.field ?? '';
+      for (const v of [r.oldValue, r.newValue]) {
+        if (!v) continue;
+        if (USER_FIELDS.has(field)) userIds.add(v);
+        else if (SPRINT_FIELDS.has(field)) sprintIds.add(v);
+        else if (ISSUE_FIELDS.has(field)) issueIds.add(v);
+      }
+    }
+
+    const [users, sprints, issueRefs] = await Promise.all([
+      userIds.size
+        ? this.prisma.user.findMany({
+            where: { id: { in: [...userIds] } },
+            select: { id: true, name: true, email: true },
+          })
+        : Promise.resolve(
+            [] as { id: string; name: string | null; email: string }[],
+          ),
+      sprintIds.size
+        ? this.prisma.sprint.findMany({
+            where: { id: { in: [...sprintIds] } },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([] as { id: string; name: string }[]),
+      issueIds.size
+        ? this.prisma.issue.findMany({
+            where: { id: { in: [...issueIds] } },
+            select: { id: true, key: true, summary: true },
+          })
+        : Promise.resolve([] as { id: string; key: string; summary: string }[]),
+    ]);
+
+    const userMap = new Map<string, string>(
+      users.map((u) => [u.id, u.name ?? u.email] as const),
+    );
+    const sprintMap = new Map<string, string>(
+      sprints.map((s) => [s.id, s.name] as const),
+    );
+    const issueMap = new Map<string, string>(
+      issueRefs.map((i) => [i.id, `${i.key} ${i.summary}`] as const),
+    );
+
+    function resolve(field: string | null, value: string | null) {
+      if (!value) return value;
+      if (field && USER_FIELDS.has(field)) return userMap.get(value) ?? null;
+      if (field && SPRINT_FIELDS.has(field))
+        return sprintMap.get(value) ?? null;
+      if (field && ISSUE_FIELDS.has(field)) return issueMap.get(value) ?? null;
+      return value;
+    }
+
+    return rows.map((r) => ({
+      ...r,
+      oldValueDisplay: resolve(r.field, r.oldValue),
+      newValueDisplay: resolve(r.field, r.newValue),
+    }));
   }
 
   // ─── Bulk Operations ──────────────────────────────────

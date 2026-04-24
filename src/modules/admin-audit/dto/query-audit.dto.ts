@@ -41,6 +41,15 @@ export class QueryAuditDto {
   @IsOptional()
   cursor?: string;
 
+  @ApiPropertyOptional({ example: 1, minimum: 1 })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? parseInt(value, 10) : value,
+  )
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  page?: number;
+
   @ApiPropertyOptional({ example: 50, minimum: 1, maximum: 200 })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? parseInt(value, 10) : value,

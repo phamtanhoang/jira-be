@@ -52,9 +52,15 @@ export class RequestLoggerInterceptor implements NestInterceptor {
       const url = request.originalUrl || request.url;
       const user = request.user;
 
-      // Drop noisy successful polls (me/refresh/app-info/admin stats/...).
-      // Failures still log regardless — they're the point.
-      if (shouldSkipLogging(request.method, url, response.statusCode)) {
+      // Drop noisy successful polls (me/refresh/app-info/admin stats/...)
+      // and anything originating from admin UI. Failures still log unless
+      // they're expected flow (auth 401 on refresh, etc.)
+      if (
+        shouldSkipLogging(request.method, url, response.statusCode, {
+          origin: request.headers['x-origin'],
+          role: user?.role,
+        })
+      ) {
         return;
       }
 

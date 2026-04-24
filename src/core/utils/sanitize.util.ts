@@ -105,9 +105,20 @@ export function shouldSkipLogging(
   method: string,
   url: string,
   statusCode: number,
+  opts?: { origin?: string | string[]; role?: string | null },
 ): boolean {
   // 5xx always logged — server errors are the whole point of logging.
   if (statusCode >= 500) return false;
+
+  // Requests that originate from the admin UI are skipped entirely (success
+  // and 4xx alike). Admin-page reads flood the log they're trying to read,
+  // which is the exact noise we want to eliminate.
+  const origin = Array.isArray(opts?.origin) ? opts.origin[0] : opts?.origin;
+  if (origin === 'admin' && opts?.role === 'ADMIN') return true;
+
+  // Any request against /admin/* is an admin-view request regardless of
+  // header — belt + suspenders for endpoints admins call directly.
+  if (url.startsWith('/admin/') || url === '/admin') return true;
 
   // 4xx on auth-probe routes is expected flow, not noise worth persisting.
   if (

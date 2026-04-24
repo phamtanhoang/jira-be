@@ -23,6 +23,7 @@ export type QueryAuditLog = {
   actorId?: string;
   targetType?: string;
   cursor?: string;
+  page?: number;
   take?: number;
 };
 
@@ -58,27 +59,36 @@ export class AdminAuditService {
 
   async findAll(query: QueryAuditLog) {
     const take = query.take ?? 50;
+    const page = Math.max(1, query.page ?? 1);
     const where: Prisma.AdminAuditLogWhereInput = {};
     if (query.action) where.action = query.action;
     if (query.actorId) where.actorId = query.actorId;
     if (query.targetType) where.targetType = query.targetType;
 
-    const data = await this.prisma.adminAuditLog.findMany({
-      where,
-      include: {
-        actor: {
-          select: { id: true, name: true, email: true, image: true },
+    const [total, data] = await this.prisma.$transaction([
+      this.prisma.adminAuditLog.count({ where }),
+      this.prisma.adminAuditLog.findMany({
+        where,
+        include: {
+          actor: {
+            select: { id: true, name: true, email: true, image: true },
+          },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: take + 1,
-      ...(query.cursor ? { skip: 1, cursor: { id: query.cursor } } : {}),
-    });
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip: (page - 1) * take,
+      }),
+    ]);
 
-    const hasMore = data.length > take;
-    const rows = hasMore ? data.slice(0, take) : data;
-    const nextCursor = hasMore ? rows[rows.length - 1].id : null;
-
-    return { data: rows, nextCursor, hasMore };
+    const totalPages = Math.max(1, Math.ceil(total / take));
+    return {
+      data,
+      total,
+      page,
+      pageSize: take,
+      totalPages,
+      hasMore: page < totalPages,
+      nextCursor: null,
+    };
   }
 }

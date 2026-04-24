@@ -69,6 +69,13 @@ export class QueryLogsDto {
   @IsString()
   cursor?: string;
 
+  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
   @ApiPropertyOptional({ default: 50, maximum: 200 })
   @IsOptional()
   @Type(() => Number)

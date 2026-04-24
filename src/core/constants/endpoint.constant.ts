@@ -92,6 +92,7 @@ export const ENDPOINTS = {
     STATS: 'stats',
     ANALYTICS: 'analytics',
     METRICS: 'metrics',
+    USER_ACTIVITY: 'user-activity',
     WORKSPACES: 'workspaces',
     WORKSPACE_BY_ID: 'workspaces/:id',
     AUDIT: 'audit',

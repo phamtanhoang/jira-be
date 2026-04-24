@@ -74,13 +74,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
     try {
       const url = request.originalUrl || request.url;
 
+      const user = request.user;
+
       // Same skip policy as the success path: expected 4xx on auth-probe
-      // routes shouldn't pollute the log. 5xx is always kept.
-      if (shouldSkipLogging(request.method, url, status)) {
+      // routes shouldn't pollute the log, and admin-origin requests are
+      // skipped entirely. 5xx is always kept.
+      if (
+        shouldSkipLogging(request.method, url, status, {
+          origin: request.headers['x-origin'],
+          role: user?.role,
+        })
+      ) {
         return;
       }
-
-      const user = request.user;
       const errorMessage =
         exception instanceof Error ? exception.message : String(exception);
       const errorStack =

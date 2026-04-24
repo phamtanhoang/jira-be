@@ -350,6 +350,80 @@ export class AdminService {
     };
   }
 
+  /**
+   * Aggregate user activity from RequestLog, excluding admin-origin traffic.
+   * Gives admins a read on what end-users actually do in the app.
+   */
+  async getUserActivity(sinceHours = 168) {
+    const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
+
+    // Base filter: skip null users (unauthenticated probes) and admin routes
+    const baseWhere: Prisma.RequestLogWhereInput = {
+      createdAt: { gte: since },
+      userId: { not: null },
+      NOT: [{ url: { startsWith: '/admin' } }],
+    };
+
+    const [topUsers, topRoutes, recent, totals] = await Promise.all([
+      // Top active users by request volume
+      this.prisma.requestLog.groupBy({
+        by: ['userId', 'userEmail'],
+        where: baseWhere,
+        _count: { _all: true },
+        _max: { createdAt: true },
+        orderBy: { _count: { userId: 'desc' } },
+        take: 15,
+      }),
+      // Top-used app endpoints
+      this.prisma.requestLog.groupBy({
+        by: ['route', 'method'],
+        where: { ...baseWhere, route: { not: null } },
+        _count: { _all: true },
+        orderBy: { _count: { route: 'desc' } },
+        take: 15,
+      }),
+      // Most recent app actions across all users (for an activity feed)
+      this.prisma.requestLog.findMany({
+        where: baseWhere,
+        select: {
+          id: true,
+          method: true,
+          url: true,
+          route: true,
+          statusCode: true,
+          userEmail: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+      }),
+      this.prisma.requestLog.aggregate({
+        where: baseWhere,
+        _count: { _all: true },
+      }),
+    ]);
+
+    return {
+      sinceHours,
+      totalRequests: totals._count._all,
+      topUsers: topUsers.map((u) => ({
+        userId: u.userId,
+        userEmail: u.userEmail,
+        count: u._count._all,
+        lastSeen: u._max.createdAt?.toISOString() ?? null,
+      })),
+      topRoutes: topRoutes.map((r) => ({
+        route: r.route,
+        method: r.method,
+        count: r._count._all,
+      })),
+      recent: recent.map((r) => ({
+        ...r,
+        createdAt: r.createdAt.toISOString(),
+      })),
+    };
+  }
+
   async listAllWorkspaces(query: QueryAdminWorkspacesDto) {
     const take = query.take ?? 50;
     const where: Prisma.WorkspaceWhereInput = {};

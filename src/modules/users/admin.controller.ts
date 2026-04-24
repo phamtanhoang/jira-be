@@ -41,6 +41,15 @@ export class AdminController {
     return this.adminService.getMetrics(query.sinceHours ?? 24);
   }
 
+  @Get(E.USER_ACTIVITY)
+  @ApiOperation({
+    summary:
+      'What end-users actually do in the app. Aggregates RequestLog over the given window, excluding admin traffic.',
+  })
+  getUserActivity(@Query() query: QueryMetricsDto) {
+    return this.adminService.getUserActivity(query.sinceHours ?? 168);
+  }
+
   @Get(E.WORKSPACES)
   @ApiOperation({ summary: 'List all workspaces across tenants (Admin only)' })
   listWorkspaces(@Query() query: QueryAdminWorkspacesDto) {

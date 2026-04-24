@@ -76,6 +76,7 @@ export class LogsService implements OnModuleInit, OnModuleDestroy {
 
   async findAll(query: QueryLogsDto) {
     const take = query.take ?? 50;
+    const page = Math.max(1, query.page ?? 1);
     const where: Prisma.RequestLogWhereInput = {};
 
     if (query.level) where.level = query.level;
@@ -105,21 +106,27 @@ export class LogsService implements OnModuleInit, OnModuleDestroy {
       if (query.dateTo) where.createdAt.lte = new Date(query.dateTo);
     }
 
-    const items = await this.prisma.requestLog.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: take + 1,
-      ...(query.cursor && {
-        cursor: { id: query.cursor },
-        skip: 1,
+    const [total, data] = await this.prisma.$transaction([
+      this.prisma.requestLog.count({ where }),
+      this.prisma.requestLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take,
+        skip: (page - 1) * take,
       }),
-    });
+    ]);
 
-    const hasMore = items.length > take;
-    const data = hasMore ? items.slice(0, take) : items;
-    const nextCursor = hasMore ? data[data.length - 1].id : null;
-
-    return { data, nextCursor, hasMore };
+    const totalPages = Math.max(1, Math.ceil(total / take));
+    return {
+      data,
+      total,
+      page,
+      pageSize: take,
+      totalPages,
+      hasMore: page < totalPages,
+      // Keep legacy field for any caller still reading it
+      nextCursor: null,
+    };
   }
 
   async findOne(id: string) {
