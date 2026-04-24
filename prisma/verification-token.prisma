@@ -3,8 +3,8 @@ model VerificationToken {
   token   String   @unique
   expires DateTime
 
-  userId  String
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, token])
   @@index([userId])

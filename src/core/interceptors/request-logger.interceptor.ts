@@ -11,6 +11,7 @@ import { AuthUser } from '@/core/types';
 import {
   sanitize,
   shouldDropRequestBody,
+  shouldSkipLogging,
   shouldSkipResponseBody,
 } from '@/core/utils';
 import { LogsService } from '@/modules/logs/logs.service';
@@ -50,6 +51,12 @@ export class RequestLoggerInterceptor implements NestInterceptor {
     try {
       const url = request.originalUrl || request.url;
       const user = request.user;
+
+      // Drop noisy successful polls (me/refresh/app-info/admin stats/...).
+      // Failures still log regardless — they're the point.
+      if (shouldSkipLogging(request.method, url, response.statusCode)) {
+        return;
+      }
 
       const requestBody = shouldDropRequestBody(url)
         ? null

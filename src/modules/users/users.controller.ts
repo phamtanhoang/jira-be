@@ -12,7 +12,7 @@ import { Role } from '@prisma/client';
 import { ENDPOINTS } from '@/core/constants';
 import { CurrentUser, Roles } from '@/core/decorators';
 import type { AuthUser } from '@/core/types';
-import { QueryUsersDto, UpdateRoleDto } from './dto';
+import { QueryUsersDto, UpdateRoleDto, UpdateStatusDto } from './dto';
 import { UsersService } from './users.service';
 
 const E = ENDPOINTS.USERS;
@@ -45,6 +45,16 @@ export class UsersController {
     return this.usersService.remove(id, user.id);
   }
 
+  @Patch(E.STATUS)
+  @ApiOperation({ summary: 'Activate or deactivate a user (Admin only)' })
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateStatusDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.usersService.setActive(id, dto.active, user.id);
+  }
+
   @Get(E.SESSIONS)
   @ApiOperation({
     summary: 'List active refresh-token sessions for a user (Admin only)',
@@ -55,13 +65,17 @@ export class UsersController {
 
   @Delete(E.SESSION_BY_ID)
   @ApiOperation({ summary: 'Revoke a single session (Admin only)' })
-  revokeSession(@Param('id') id: string, @Param('tokenId') tokenId: string) {
-    return this.usersService.revokeSession(id, tokenId);
+  revokeSession(
+    @Param('id') id: string,
+    @Param('tokenId') tokenId: string,
+    @CurrentUser() actor: AuthUser,
+  ) {
+    return this.usersService.revokeSession(id, tokenId, actor.id);
   }
 
   @Delete(E.SESSIONS)
   @ApiOperation({ summary: 'Revoke ALL sessions for a user (Admin only)' })
-  revokeAllSessions(@Param('id') id: string) {
-    return this.usersService.revokeAllSessions(id);
+  revokeAllSessions(@Param('id') id: string, @CurrentUser() actor: AuthUser) {
+    return this.usersService.revokeAllSessions(id, actor.id);
   }
 }

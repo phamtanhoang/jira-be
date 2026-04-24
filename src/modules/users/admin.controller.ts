@@ -2,7 +2,8 @@ import { Controller, Delete, Get, Param, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { ENDPOINTS } from '@/core/constants';
-import { Roles } from '@/core/decorators';
+import { CurrentUser, Roles } from '@/core/decorators';
+import type { AuthUser } from '@/core/types';
 import { AdminService } from './admin.service';
 import {
   QueryAdminWorkspacesDto,
@@ -48,7 +49,7 @@ export class AdminController {
 
   @Delete(E.WORKSPACE_BY_ID)
   @ApiOperation({ summary: 'Admin delete any workspace (cascades)' })
-  deleteWorkspace(@Param('id') id: string) {
-    return this.adminService.deleteWorkspace(id);
+  deleteWorkspace(@Param('id') id: string, @CurrentUser() actor: AuthUser) {
+    return this.adminService.deleteWorkspace(id, actor.id);
   }
 }

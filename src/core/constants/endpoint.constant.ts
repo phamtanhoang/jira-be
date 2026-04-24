@@ -13,6 +13,7 @@ export const ENDPOINTS = {
   SETTINGS: {
     BASE: 'settings',
     APP_INFO: 'app-info',
+    APP_INFO_LOGO: 'app-info/logo',
     APP_ANNOUNCEMENT: 'app-announcement',
     APP_MAINTENANCE: 'app-maintenance',
     BY_KEY: ':key',
@@ -82,6 +83,7 @@ export const ENDPOINTS = {
     BASE: 'users',
     BY_ID: ':id',
     ROLE: ':id/role',
+    STATUS: ':id/status',
     SESSIONS: ':id/sessions',
     SESSION_BY_ID: ':id/sessions/:tokenId',
   },
@@ -92,5 +94,11 @@ export const ENDPOINTS = {
     METRICS: 'metrics',
     WORKSPACES: 'workspaces',
     WORKSPACE_BY_ID: 'workspaces/:id',
+    AUDIT: 'audit',
+  },
+  FEATURE_FLAGS: {
+    BASE: 'feature-flags',
+    BY_ID: ':id',
+    ME: 'me',
   },
 } as const;

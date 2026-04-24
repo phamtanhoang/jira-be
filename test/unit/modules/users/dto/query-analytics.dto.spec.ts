@@ -11,7 +11,7 @@ describe('QueryAnalyticsDto', () => {
     expect(await validate(toDto({}))).toHaveLength(0);
   });
 
-  it.each([7, 14, 30])('accepts days=%i', async (days) => {
+  it.each([1, 7, 14, 30, 45, 90, 180])('accepts days=%i', async (days) => {
     expect(await validate(toDto({ days }))).toHaveLength(0);
   });
 
@@ -21,10 +21,13 @@ describe('QueryAnalyticsDto', () => {
     expect(await validate(dto)).toHaveLength(0);
   });
 
-  it('rejects days outside the whitelist', async () => {
-    for (const days of [1, 10, 60, 365]) {
-      const errors = await validate(toDto({ days }));
-      expect(errors.some((e) => e.property === 'days')).toBe(true);
-    }
+  it('rejects days < 1', async () => {
+    const errors = await validate(toDto({ days: 0 }));
+    expect(errors.some((e) => e.property === 'days')).toBe(true);
+  });
+
+  it('rejects days > 180', async () => {
+    const errors = await validate(toDto({ days: 365 }));
+    expect(errors.some((e) => e.property === 'days')).toBe(true);
   });
 });

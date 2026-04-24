@@ -1,0 +1,13 @@
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  actorId    String
+  actor      User     @relation("AdminAudit", fields: [actorId], references: [id], onDelete: Cascade)
+  action     String
+  target     String?
+  targetType String?
+  payload    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}

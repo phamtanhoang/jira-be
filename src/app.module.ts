@@ -10,11 +10,13 @@ import {
   TimezoneInterceptor,
 } from '@/core/interceptors';
 import { SentryService } from '@/core/services/sentry.service';
+import { AdminAuditModule } from '@/modules/admin-audit/admin-audit.module';
 import { AttachmentsModule } from '@/modules/attachments/attachments.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { BoardsModule } from '@/modules/boards/boards.module';
 import { CommentsModule } from '@/modules/comments/comments.module';
 import { DebugModule } from '@/modules/debug/debug.module';
+import { FeatureFlagsModule } from '@/modules/feature-flags/feature-flags.module';
 import { IssuesModule } from '@/modules/issues/issues.module';
 import { LabelsModule } from '@/modules/labels/labels.module';
 import { LogsModule } from '@/modules/logs/logs.module';
@@ -43,6 +45,8 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     WorklogsModule,
     AttachmentsModule,
     UsersModule,
+    FeatureFlagsModule,
+    AdminAuditModule,
     DebugModule,
   ],
   providers: [

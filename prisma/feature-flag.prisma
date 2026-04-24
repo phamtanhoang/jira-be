@@ -1,0 +1,15 @@
+model FeatureFlag {
+  id                String   @id @default(uuid())
+  key               String   @unique
+  name              String
+  description       String?
+  enabled           Boolean  @default(false)
+  rolloutPercentage Int      @default(0)
+  conditions        Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdById       String?
+  createdBy         User?    @relation("FeatureFlagCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([key])
+}

@@ -2,10 +2,15 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { MSG, SETTING_KEYS } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { uploadFile } from '@/core/utils';
+import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 
 @Injectable()
 export class SettingsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AdminAuditService,
+  ) {}
 
   async getAppInfo() {
     const setting = await this.prisma.setting.findUnique({
@@ -45,11 +50,51 @@ export class SettingsService {
     return setting;
   }
 
-  async setByKey(key: string, value: Prisma.InputJsonValue) {
-    return this.prisma.setting.upsert({
+  /**
+   * Upload a new app logo to Supabase and write its URL into the `app.info`
+   * setting's `logoUrl` field. Preserves other fields.
+   */
+  async uploadAppLogo(
+    buffer: Buffer,
+    fileName: string,
+    mimeType: string,
+    actorId: string,
+  ) {
+    const url = await uploadFile(buffer, fileName, mimeType);
+
+    const existing = await this.prisma.setting.findUnique({
+      where: { key: SETTING_KEYS.APP_INFO },
+    });
+    const current =
+      (existing?.value as Record<string, unknown> | null | undefined) ?? {};
+    const nextValue = { ...current, logoUrl: url };
+
+    await this.prisma.setting.upsert({
+      where: { key: SETTING_KEYS.APP_INFO },
+      update: { value: nextValue as Prisma.InputJsonValue },
+      create: {
+        key: SETTING_KEYS.APP_INFO,
+        value: nextValue as Prisma.InputJsonValue,
+      },
+    });
+    this.audit.log(actorId, 'SETTING_UPDATE', {
+      target: SETTING_KEYS.APP_INFO,
+      targetType: 'Setting',
+      payload: { logoUrl: url },
+    });
+    return { message: MSG.SUCCESS.SETTINGS_UPDATED, logoUrl: url };
+  }
+
+  async setByKey(key: string, value: Prisma.InputJsonValue, actorId: string) {
+    const row = await this.prisma.setting.upsert({
       where: { key },
       update: { value },
       create: { key, value },
     });
+    this.audit.log(actorId, 'SETTING_UPDATE', {
+      target: key,
+      targetType: 'Setting',
+    });
+    return row;
   }
 }

@@ -130,6 +130,10 @@ export class AuthService {
       throw new UnauthorizedException(MSG.ERROR.EMAIL_NOT_VERIFIED);
     }
 
+    if (!user.active) {
+      throw new UnauthorizedException(MSG.ERROR.ACCOUNT_DEACTIVATED);
+    }
+
     const tokens = await this.generateTokens(user.id, user.email);
     return tokens;
   }

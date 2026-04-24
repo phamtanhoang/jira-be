@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { LogLevel, Prisma } from '@prisma/client';
 import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { QueryAdminWorkspacesDto } from './dto';
 
 type LogLevelCounts = Record<LogLevel, number>;
@@ -20,10 +21,23 @@ type RouteMetricRow = {
   p95: number | null;
   p99: number | null;
 };
+type SlowestRow = {
+  id: string;
+  url: string;
+  method: string;
+  statusCode: number | null;
+  durationMs: number | null;
+  userEmail: string | null;
+  createdAt: Date;
+};
+type HourlyErrorRow = { bucket: Date; count: bigint };
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AdminAuditService,
+  ) {}
 
   async getStats() {
     const now = new Date();
@@ -39,6 +53,9 @@ export class AdminService {
       projectsTotal,
       issuesTotal,
       logsGrouped,
+      recentSignups,
+      topWorkspacesPool,
+      activeUsers24hRaw,
     ] = await this.prisma.$transaction([
       this.prisma.user.count(),
       this.prisma.user.count({ where: { role: 'ADMIN' } }),
@@ -53,6 +70,34 @@ export class AdminService {
         _count: { level: true },
         orderBy: { level: 'asc' },
       }),
+      this.prisma.user.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.workspace.findMany({
+        take: 20,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          owner: USER_SELECT_BASIC,
+          _count: { select: { projects: true, members: true } },
+        },
+      }),
+      this.prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(DISTINCT "userId")::bigint AS "count"
+        FROM "RequestLog"
+        WHERE "createdAt" >= ${since24h}
+          AND "userId" IS NOT NULL
+      `,
     ]);
 
     const logs: LogLevelCounts = { INFO: 0, WARN: 0, ERROR: 0 };
@@ -60,6 +105,17 @@ export class AdminService {
       const count = row._count as { level?: number } | undefined;
       logs[row.level] = count?.level ?? 0;
     }
+
+    // Top 3 by (projects + members). Sorting 20 rows in memory keeps the
+    // query simple without a custom groupBy/raw-sql aggregation.
+    const topWorkspaces = [...topWorkspacesPool]
+      .sort(
+        (a, b) =>
+          b._count.projects +
+          b._count.members -
+          (a._count.projects + a._count.members),
+      )
+      .slice(0, 3);
 
     return {
       users: {
@@ -72,6 +128,9 @@ export class AdminService {
       projects: { total: projectsTotal },
       issues: { total: issuesTotal },
       logs: { last24h: logs },
+      recentSignups,
+      topWorkspaces,
+      activeUsers24h: Number(activeUsers24hRaw[0]?.count ?? 0),
     };
   }
 
@@ -86,7 +145,15 @@ export class AdminService {
     const since = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
     since.setUTCHours(0, 0, 0, 0);
 
-    const [signupsRaw, issuesRaw, workspacesRaw, logsRaw] = await Promise.all([
+    const [
+      signupsRaw,
+      issuesRaw,
+      workspacesRaw,
+      commentsRaw,
+      worklogsRaw,
+      activeUsersRaw,
+      logsRaw,
+    ] = await Promise.all([
       this.prisma.$queryRaw<DailyCountRow[]>`
         SELECT DATE_TRUNC('day', "createdAt") AS "date",
                COUNT(*)::bigint AS "count"
@@ -108,6 +175,31 @@ export class AdminService {
                COUNT(*)::bigint AS "count"
         FROM "Workspace"
         WHERE "createdAt" >= ${since}
+        GROUP BY DATE_TRUNC('day', "createdAt")
+        ORDER BY "date" ASC
+      `,
+      this.prisma.$queryRaw<DailyCountRow[]>`
+        SELECT DATE_TRUNC('day', "createdAt") AS "date",
+               COUNT(*)::bigint AS "count"
+        FROM "Comment"
+        WHERE "createdAt" >= ${since}
+        GROUP BY DATE_TRUNC('day', "createdAt")
+        ORDER BY "date" ASC
+      `,
+      this.prisma.$queryRaw<DailyCountRow[]>`
+        SELECT DATE_TRUNC('day', "createdAt") AS "date",
+               COUNT(*)::bigint AS "count"
+        FROM "Worklog"
+        WHERE "createdAt" >= ${since}
+        GROUP BY DATE_TRUNC('day', "createdAt")
+        ORDER BY "date" ASC
+      `,
+      this.prisma.$queryRaw<DailyCountRow[]>`
+        SELECT DATE_TRUNC('day', "createdAt") AS "date",
+               COUNT(DISTINCT "userId")::bigint AS "count"
+        FROM "RequestLog"
+        WHERE "createdAt" >= ${since}
+          AND "userId" IS NOT NULL
         GROUP BY DATE_TRUNC('day', "createdAt")
         ORDER BY "date" ASC
       `,
@@ -161,6 +253,9 @@ export class AdminService {
       signups: simpleBuckets(signupsRaw),
       issuesCreated: simpleBuckets(issuesRaw),
       newWorkspaces: simpleBuckets(workspacesRaw),
+      comments: simpleBuckets(commentsRaw),
+      worklogs: simpleBuckets(worklogsRaw),
+      activeUsers: simpleBuckets(activeUsersRaw),
       requestsByLevel: logBuckets(),
     };
   }
@@ -173,8 +268,9 @@ export class AdminService {
   async getMetrics(sinceHours = 24) {
     const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
 
-    const [topRoutesRaw, methodsRaw, statusesRaw] = await Promise.all([
-      this.prisma.$queryRaw<RouteMetricRow[]>`
+    const [topRoutesRaw, methodsRaw, statusesRaw, slowestRaw, errorTrendRaw] =
+      await Promise.all([
+        this.prisma.$queryRaw<RouteMetricRow[]>`
         SELECT "route",
                COUNT(*)::bigint AS "count",
                COUNT(*) FILTER (WHERE "statusCode" >= 500)::bigint AS "errorcount",
@@ -188,19 +284,37 @@ export class AdminService {
         ORDER BY "count" DESC
         LIMIT 10
       `,
-      this.prisma.requestLog.groupBy({
-        by: ['method'],
-        where: { createdAt: { gte: since } },
-        _count: { method: true },
-        orderBy: { _count: { method: 'desc' } },
-      }),
-      this.prisma.requestLog.groupBy({
-        by: ['statusCode'],
-        where: { createdAt: { gte: since }, statusCode: { not: null } },
-        _count: { statusCode: true },
-        orderBy: { statusCode: 'asc' },
-      }),
-    ]);
+        this.prisma.requestLog.groupBy({
+          by: ['method'],
+          where: { createdAt: { gte: since } },
+          _count: { method: true },
+          orderBy: { _count: { method: 'desc' } },
+        }),
+        this.prisma.requestLog.groupBy({
+          by: ['statusCode'],
+          where: { createdAt: { gte: since }, statusCode: { not: null } },
+          _count: { statusCode: true },
+          orderBy: { statusCode: 'asc' },
+        }),
+        this.prisma.$queryRaw<SlowestRow[]>`
+        SELECT "id", "url", "method", "statusCode", "durationMs",
+               "userEmail", "createdAt"
+        FROM "RequestLog"
+        WHERE "createdAt" >= ${since}
+          AND "durationMs" IS NOT NULL
+        ORDER BY "durationMs" DESC NULLS LAST
+        LIMIT 10
+      `,
+        this.prisma.$queryRaw<HourlyErrorRow[]>`
+        SELECT DATE_TRUNC('hour', "createdAt") AS "bucket",
+               COUNT(*)::bigint AS "count"
+        FROM "RequestLog"
+        WHERE "createdAt" >= ${since}
+          AND "statusCode" >= 500
+        GROUP BY DATE_TRUNC('hour', "createdAt")
+        ORDER BY "bucket" ASC
+      `,
+      ]);
 
     return {
       sinceHours,
@@ -220,6 +334,19 @@ export class AdminService {
         const c = r._count as { statusCode?: number } | undefined;
         return { statusCode: r.statusCode ?? 0, count: c?.statusCode ?? 0 };
       }),
+      slowestRequests: slowestRaw.map((r) => ({
+        id: r.id,
+        url: r.url,
+        method: r.method,
+        statusCode: r.statusCode,
+        durationMs: r.durationMs ?? 0,
+        userEmail: r.userEmail,
+        createdAt: r.createdAt,
+      })),
+      errorTrendHourly: errorTrendRaw.map((r) => ({
+        bucket: r.bucket.toISOString(),
+        count: Number(r.count),
+      })),
     };
   }
 
@@ -265,13 +392,18 @@ export class AdminService {
     return { data: rows, nextCursor, hasMore };
   }
 
-  async deleteWorkspace(id: string) {
+  async deleteWorkspace(id: string, actorId: string) {
     const exists = await this.prisma.workspace.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, name: true },
     });
     if (!exists) throw new NotFoundException(MSG.ERROR.WORKSPACE_NOT_FOUND);
     await this.prisma.workspace.delete({ where: { id } });
+    this.audit.log(actorId, 'WORKSPACE_DELETE', {
+      target: id,
+      targetType: 'Workspace',
+      payload: { name: exists.name },
+    });
     return { message: MSG.SUCCESS.WORKSPACE_DELETED };
   }
 }

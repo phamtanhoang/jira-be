@@ -6,11 +6,15 @@ import {
 import { Prisma, Role } from '@prisma/client';
 import { MSG, USER_SELECT_ADMIN } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { QueryUsersDto } from './dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AdminAuditService,
+  ) {}
 
   async findAll(query: QueryUsersDto) {
     const take = query.take ?? 50;
@@ -56,6 +60,11 @@ export class UsersService {
       data: { role },
       ...USER_SELECT_ADMIN,
     });
+    this.audit.log(currentUserId, 'ROLE_CHANGE', {
+      target: id,
+      targetType: 'User',
+      payload: { role },
+    });
     return { message: MSG.SUCCESS.USER_ROLE_UPDATED, user };
   }
 
@@ -65,6 +74,10 @@ export class UsersService {
     }
     await this.assertExists(id);
     await this.prisma.user.delete({ where: { id } });
+    this.audit.log(currentUserId, 'USER_DELETE', {
+      target: id,
+      targetType: 'User',
+    });
     return { message: MSG.SUCCESS.USER_DELETED };
   }
 
@@ -82,7 +95,7 @@ export class UsersService {
     return { data };
   }
 
-  async revokeSession(userId: string, tokenId: string) {
+  async revokeSession(userId: string, tokenId: string, actorId: string) {
     await this.assertExists(userId);
     const token = await this.prisma.refreshToken.findUnique({
       where: { id: tokenId },
@@ -92,13 +105,57 @@ export class UsersService {
       throw new NotFoundException(MSG.ERROR.REFRESH_TOKEN_NOT_FOUND);
     }
     await this.prisma.refreshToken.delete({ where: { id: tokenId } });
+    this.audit.log(actorId, 'SESSION_REVOKE', {
+      target: tokenId,
+      targetType: 'RefreshToken',
+      payload: { userId },
+    });
     return { message: MSG.SUCCESS.SESSION_REVOKED };
   }
 
-  async revokeAllSessions(userId: string) {
+  async revokeAllSessions(userId: string, actorId: string) {
     await this.assertExists(userId);
     await this.prisma.refreshToken.deleteMany({ where: { userId } });
+    this.audit.log(actorId, 'SESSIONS_REVOKE_ALL', {
+      target: userId,
+      targetType: 'User',
+    });
     return { message: MSG.SUCCESS.SESSIONS_REVOKED };
+  }
+
+  /**
+   * Activate or deactivate a user. Inactive users are rejected at login and
+   * have their refresh tokens wiped so existing sessions die immediately.
+   * Self-deactivation is forbidden so admins cannot lock themselves out.
+   */
+  async setActive(id: string, active: boolean, currentUserId: string) {
+    if (id === currentUserId) {
+      throw new ForbiddenException(MSG.ERROR.CANNOT_MODIFY_SELF);
+    }
+    await this.assertExists(id);
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: {
+        active,
+        deactivatedAt: active ? null : new Date(),
+      },
+      ...USER_SELECT_ADMIN,
+    });
+    if (!active) {
+      // Kill existing sessions so the user is logged out everywhere.
+      await this.prisma.refreshToken.deleteMany({ where: { userId: id } });
+    }
+    this.audit.log(
+      currentUserId,
+      active ? 'USER_ACTIVATE' : 'USER_DEACTIVATE',
+      { target: id, targetType: 'User' },
+    );
+    return {
+      message: active
+        ? MSG.SUCCESS.USER_ACTIVATED
+        : MSG.SUCCESS.USER_DEACTIVATED,
+      user,
+    };
   }
 
   private async assertExists(id: string) {

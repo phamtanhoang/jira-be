@@ -27,6 +27,8 @@ export const USER_SELECT_ADMIN = {
     emailVerified: true,
     image: true,
     role: true,
+    active: true,
+    deactivatedAt: true,
     createdAt: true,
     updatedAt: true,
     _count: {

@@ -66,6 +66,39 @@ export function shouldSkipResponseBody(url: string): boolean {
 }
 
 /**
+ * Noisy routes — every FE tab polls these every few seconds. Logging them
+ * floods the RequestLog table and drowns out genuinely interesting traffic.
+ * Skipped ONLY for successful (2xx/3xx) GET responses; any 4xx/5xx still logs
+ * (errors are always worth keeping).
+ *
+ * Maintain this list carefully: new polling endpoints should be added here.
+ * Business-meaningful reads (GET /issues, /workspaces, /users ...) stay
+ * logged so admins can audit what was viewed.
+ */
+export const LOG_SKIP_GET_ROUTES = [
+  '/auth/me',
+  '/auth/refresh',
+  '/settings/app-info',
+  '/settings/app-announcement',
+  '/settings/app-maintenance',
+  '/admin/stats',
+  '/admin/analytics',
+  '/admin/metrics',
+  '/logs/client',
+];
+
+export function shouldSkipLogging(
+  method: string,
+  url: string,
+  statusCode: number,
+): boolean {
+  // Always log failures — they are the whole point of logging.
+  if (statusCode >= 400) return false;
+  if (method.toUpperCase() !== 'GET') return false;
+  return LOG_SKIP_GET_ROUTES.some((route) => url.startsWith(route));
+}
+
+/**
  * Strip sensitive HTTP headers before persistence.
  * Returns a shallow-cloned, lowercased-keys object with masked entries.
  */

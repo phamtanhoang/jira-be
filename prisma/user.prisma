@@ -8,22 +8,27 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   role          Role      @default(USER)
+  active        Boolean   @default(true)
+  deactivatedAt DateTime?
 
   refreshTokens      RefreshToken[]
   verificationTokens VerificationToken[]
 
-  ownedWorkspaces    Workspace[]       @relation("WorkspaceOwner")
-  workspaceMembers   WorkspaceMember[]
+  ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
+  workspaceMembers WorkspaceMember[]
 
-  ledProjects        Project[]         @relation("ProjectLead")
-  defaultProjects    Project[]         @relation("ProjectDefaultAssignee")
-  projectMembers     ProjectMember[]
+  ledProjects     Project[]       @relation("ProjectLead")
+  defaultProjects Project[]       @relation("ProjectDefaultAssignee")
+  projectMembers  ProjectMember[]
 
-  reportedIssues     Issue[]           @relation("IssueReporter")
-  assignedIssues     Issue[]           @relation("IssueAssignee")
+  reportedIssues Issue[] @relation("IssueReporter")
+  assignedIssues Issue[] @relation("IssueAssignee")
 
-  comments           Comment[]         @relation("CommentAuthor")
-  attachments        Attachment[]      @relation("AttachmentUploader")
-  worklogs           Worklog[]         @relation("WorklogUser")
-  activities         Activity[]        @relation("ActivityUser")
+  comments    Comment[]    @relation("CommentAuthor")
+  attachments Attachment[] @relation("AttachmentUploader")
+  worklogs    Worklog[]    @relation("WorklogUser")
+  activities  Activity[]   @relation("ActivityUser")
+
+  createdFeatureFlags FeatureFlag[]   @relation("FeatureFlagCreator")
+  adminAuditLogs      AdminAuditLog[] @relation("AdminAudit")
 }

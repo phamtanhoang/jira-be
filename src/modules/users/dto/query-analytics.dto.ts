@@ -1,14 +1,20 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsIn, IsInt, IsOptional } from 'class-validator';
+import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class QueryAnalyticsDto {
-  @ApiPropertyOptional({ example: 14, enum: [7, 14, 30] })
+  @ApiPropertyOptional({
+    example: 14,
+    minimum: 1,
+    maximum: 180,
+    description: 'Number of trailing days to bucket (1..180)',
+  })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? parseInt(value, 10) : value,
   )
   @IsInt()
-  @IsIn([7, 14, 30])
+  @Min(1)
+  @Max(180)
   @IsOptional()
   days?: number;
 }
