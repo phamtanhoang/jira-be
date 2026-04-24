@@ -147,7 +147,16 @@ export class AuthService {
     }
 
     const tokens = await this.generateTokens(user.id, user.email);
-    return tokens;
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        role: user.role,
+      },
+    };
   }
 
   async refresh(oldRefreshToken: string) {
