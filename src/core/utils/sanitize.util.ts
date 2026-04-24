@@ -101,6 +101,17 @@ export const LOG_SKIP_GET_ROUTES = [
  */
 export const LOG_SKIP_4XX_ROUTES = ['/auth/me', '/auth/refresh'];
 
+/**
+ * Routes skipped regardless of HTTP method (as long as status < 500). These
+ * are pure housekeeping: the FE fires them automatically on schedule and the
+ * user never sees them. Logging each one just pollutes the request log with
+ * noise that drowns out real activity.
+ *
+ * `/auth/refresh` is the canonical case — every expired access token triggers
+ * one POST that carries no user intent. 5xx still logs (real failures).
+ */
+export const LOG_SKIP_ALWAYS_ROUTES = ['/auth/refresh'];
+
 export function shouldSkipLogging(
   method: string,
   url: string,
@@ -119,6 +130,13 @@ export function shouldSkipLogging(
   // Any request against /admin/* is an admin-view request regardless of
   // header — belt + suspenders for endpoints admins call directly.
   if (url.startsWith('/admin/') || url === '/admin') return true;
+
+  // Housekeeping routes: skipped regardless of method / status (except 5xx,
+  // already short-circuited above). `/auth/refresh` fires automatically on
+  // every expired access token — logging these just hides real activity.
+  if (LOG_SKIP_ALWAYS_ROUTES.some((route) => url.startsWith(route))) {
+    return true;
+  }
 
   // 4xx on auth-probe routes is expected flow, not noise worth persisting.
   if (
