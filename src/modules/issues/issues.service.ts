@@ -163,6 +163,58 @@ export class IssuesService {
     return { data, nextCursor, hasMore };
   }
 
+  async findMyDashboard(userId: string) {
+    const now = new Date();
+    const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    // All non-DONE issues assigned to me, across any workspace I'm a member of
+    const open = await this.prisma.issue.findMany({
+      where: {
+        assigneeId: userId,
+        boardColumn: { category: { not: StatusCategory.DONE } },
+        project: {
+          workspace: { members: { some: { userId } } },
+        },
+      },
+      include: {
+        ...ISSUE_INCLUDE,
+        project: { select: { id: true, key: true, name: true } },
+      },
+      orderBy: [{ dueDate: 'asc' }, { updatedAt: 'desc' }],
+    });
+
+    const overdue = open.filter((i) => i.dueDate && i.dueDate < now);
+    const dueSoon = open.filter(
+      (i) => i.dueDate && i.dueDate >= now && i.dueDate <= in7Days,
+    );
+
+    // Issues updated in the last 7 days on projects I have access to
+    const recentActivityCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const recent = await this.prisma.issue.findMany({
+      where: {
+        updatedAt: { gte: recentActivityCutoff },
+        project: {
+          workspace: { members: { some: { userId } } },
+        },
+      },
+      include: ISSUE_INCLUDE,
+      orderBy: { updatedAt: 'desc' },
+      take: 10,
+    });
+
+    return {
+      assigned: open,
+      overdue,
+      dueSoon,
+      recent,
+      stats: {
+        total: open.length,
+        overdue: overdue.length,
+        dueSoon: dueSoon.length,
+      },
+    };
+  }
+
   async findByKey(key: string, userId: string) {
     const issue = await this.prisma.issue.findUnique({
       where: { key },

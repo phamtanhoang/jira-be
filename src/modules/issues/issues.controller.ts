@@ -61,6 +61,15 @@ export class IssuesController {
     });
   }
 
+  @Get('me/dashboard')
+  @ApiOperation({
+    summary:
+      'Current user dashboard: assigned open issues, overdue, due-soon, and recent activity across all workspaces the user belongs to.',
+  })
+  findMyDashboard(@CurrentUser() user: AuthUser) {
+    return this.issuesService.findMyDashboard(user.id);
+  }
+
   @Get(E.BY_KEY)
   @ApiOperation({ summary: 'Get issue by key (e.g. PROJ-42)' })
   findByKey(@Param('key') key: string, @CurrentUser() user: AuthUser) {

@@ -6,7 +6,7 @@ import {
 import { ActivityAction } from '@prisma/client';
 import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import { uploadFile, deleteFile } from '@/core/utils';
+import { uploadFile, deleteFile, createSignedUrl } from '@/core/utils';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 
 @Injectable()
@@ -84,11 +84,45 @@ export class AttachmentsService {
       userId,
     );
 
-    return this.prisma.attachment.findMany({
+    const rows = await this.prisma.attachment.findMany({
       where: { issueId },
       include: { uploadedBy: USER_SELECT_BASIC },
       orderBy: { createdAt: 'desc' },
     });
+
+    // Enrich with short-TTL signed URLs so the bucket can be switched to
+    // private without FE changes — on a public bucket these still resolve.
+    const enriched = await Promise.all(
+      rows.map(async (r) => {
+        const signedUrl = await createSignedUrl(r.fileUrl, 600);
+        return { ...r, signedUrl: signedUrl ?? r.fileUrl };
+      }),
+    );
+    return enriched;
+  }
+
+  async getSignedUrl(attachmentId: string, userId: string) {
+    const attachment = await this.prisma.attachment.findUnique({
+      where: { id: attachmentId },
+      include: {
+        issue: { include: { project: { select: { workspaceId: true } } } },
+      },
+    });
+    if (!attachment)
+      throw new NotFoundException(MSG.ERROR.ATTACHMENT_NOT_FOUND);
+
+    await this.workspacesService.assertMember(
+      attachment.issue.project.workspaceId,
+      userId,
+    );
+
+    const signedUrl = await createSignedUrl(attachment.fileUrl, 300);
+    return {
+      url: signedUrl ?? attachment.fileUrl,
+      expiresInSec: 300,
+      fileName: attachment.fileName,
+      mimeType: attachment.mimeType,
+    };
   }
 
   async delete(attachmentId: string, userId: string) {

@@ -86,6 +86,15 @@ export class AttachmentsIssueController {
 export class AttachmentsManageController {
   constructor(private attachmentsService: AttachmentsService) {}
 
+  @Get(':id/signed-url')
+  @ApiOperation({
+    summary:
+      'Get a short-lived signed URL to download/view an attachment. Caller must be a member of the workspace that owns the issue.',
+  })
+  getSignedUrl(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.attachmentsService.getSignedUrl(id, user.id);
+  }
+
   @Delete(ENDPOINTS.ATTACHMENTS.BY_ID)
   @ApiOperation({ summary: 'Delete own attachment' })
   async delete(@Param('id') id: string, @CurrentUser() user: AuthUser) {

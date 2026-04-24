@@ -51,11 +51,48 @@ export async function deleteFile(publicUrl: string): Promise<void> {
   const supabase = getSupabase();
   const bucket = getBucket();
 
-  // URL format: https://{project}.supabase.co/storage/v1/object/public/{bucket}/{path}
-  const parts = publicUrl.split(`/storage/v1/object/public/${bucket}/`);
-  if (parts.length < 2) return;
+  const path = extractStoragePath(publicUrl);
+  if (!path) return;
 
-  const path = parts[1];
   const { error } = await supabase.storage.from(bucket).remove([path]);
   if (error) console.error('Supabase delete error:', error);
+}
+
+/**
+ * Generate a short-lived signed URL for a previously uploaded file.
+ * Returns `null` if the URL doesn't look like one of our storage paths.
+ *
+ * `expiresInSec` defaults to 5 minutes — short enough to limit leak damage,
+ * long enough for a browser to fetch and render an image or file preview.
+ */
+export async function createSignedUrl(
+  publicUrl: string,
+  expiresInSec = 300,
+): Promise<string | null> {
+  const supabase = getSupabase();
+  const bucket = getBucket();
+
+  const path = extractStoragePath(publicUrl);
+  if (!path) return null;
+
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(path, expiresInSec);
+
+  if (error || !data) {
+    console.error('Supabase signed URL error:', error);
+    return null;
+  }
+  return data.signedUrl;
+}
+
+function extractStoragePath(publicUrl: string): string | null {
+  const bucket = getBucket();
+  // Public URL: https://{project}.supabase.co/storage/v1/object/public/{bucket}/{path}
+  // Signed URL (for completeness): /storage/v1/object/sign/{bucket}/{path}
+  const publicParts = publicUrl.split(`/storage/v1/object/public/${bucket}/`);
+  if (publicParts.length === 2) return publicParts[1].split('?')[0];
+  const signParts = publicUrl.split(`/storage/v1/object/sign/${bucket}/`);
+  if (signParts.length === 2) return signParts[1].split('?')[0];
+  return null;
 }

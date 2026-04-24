@@ -5,23 +5,35 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ENV, MSG } from '@/core/constants';
+import { ENV, MSG, USER_SELECT_FULL } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { MailService } from '@/core/mail/mail.service';
 import {
   calculateExpiryDate,
+  deleteFile,
   generateOTP,
   generateRefreshToken,
   hashPassword,
+  uploadFile,
   validatePassword,
 } from '@/core/utils';
 import {
+  ChangePasswordDto,
   ForgotPasswordDto,
   LoginDto,
   RegisterDto,
   ResetPasswordDto,
+  UpdateProfileDto,
   VerifyEmailDto,
 } from './dto';
+
+const ALLOWED_AVATAR_MIMES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+]);
+const MAX_AVATAR_SIZE = 2 * 1024 * 1024; // 2MB
 
 @Injectable()
 export class AuthService {
@@ -225,6 +237,93 @@ export class AuthService {
     ]);
 
     return { message: MSG.SUCCESS.RESET_PASSWORD };
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const updates: Record<string, unknown> = {};
+    if (dto.name !== undefined) updates.name = dto.name.trim();
+    if (dto.image !== undefined) updates.image = dto.image;
+
+    if (Object.keys(updates).length === 0) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        ...USER_SELECT_FULL,
+      });
+      return { message: MSG.SUCCESS.PROFILE_UPDATED, user };
+    }
+
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: updates,
+      ...USER_SELECT_FULL,
+    });
+
+    return { message: MSG.SUCCESS.PROFILE_UPDATED, user };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.password) {
+      throw new BadRequestException(MSG.ERROR.USER_NOT_FOUND);
+    }
+
+    const valid = await validatePassword(dto.currentPassword, user.password);
+    if (!valid) {
+      throw new BadRequestException(MSG.ERROR.INVALID_CURRENT_PASSWORD);
+    }
+
+    const hashed = await hashPassword(dto.newPassword);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { password: hashed },
+      }),
+      // Revoke all refresh tokens for safety
+      this.prisma.refreshToken.deleteMany({ where: { userId } }),
+    ]);
+
+    return { message: MSG.SUCCESS.PASSWORD_CHANGED };
+  }
+
+  async uploadAvatar(userId: string, file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException(MSG.ERROR.INVALID_IMAGE_TYPE);
+    }
+    if (!ALLOWED_AVATAR_MIMES.has(file.mimetype)) {
+      throw new BadRequestException(MSG.ERROR.INVALID_IMAGE_TYPE);
+    }
+    if (file.size > MAX_AVATAR_SIZE) {
+      throw new BadRequestException(MSG.ERROR.IMAGE_TOO_LARGE);
+    }
+
+    const existing = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { image: true },
+    });
+
+    const fileUrl = await uploadFile(
+      file.buffer,
+      `avatar-${userId}-${file.originalname}`,
+      file.mimetype,
+    );
+
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { image: fileUrl },
+      ...USER_SELECT_FULL,
+    });
+
+    // Best-effort cleanup of the previous avatar
+    if (existing?.image) {
+      try {
+        await deleteFile(existing.image);
+      } catch {
+        // Ignore — stale avatar cleanup shouldn't fail the upload
+      }
+    }
+
+    return { message: MSG.SUCCESS.AVATAR_UPLOADED, user };
   }
 
   async logout(refreshToken: string) {
