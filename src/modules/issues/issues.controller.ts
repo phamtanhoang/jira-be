@@ -9,6 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ENDPOINTS, MSG } from '@/core/constants';
 import { CurrentUser } from '@/core/decorators';
 import { AuthUser } from '@/core/types';
@@ -36,6 +37,10 @@ export class IssuesController {
   }
 
   @Get()
+  // Board/backlog views refetch this endpoint often (filters, sprints,
+  // search). It's already gated by workspace membership, so skip the
+  // global throttle to keep quick-filter UX snappy.
+  @SkipThrottle()
   @ApiOperation({
     summary: 'List/filter issues by project. Add take & cursor for pagination.',
   })
@@ -77,6 +82,9 @@ export class IssuesController {
   }
 
   @Get(E.ACTIVITY)
+  // Opening / closing an issue modal re-fetches activity. Skip throttle
+  // — workspace membership check is enough.
+  @SkipThrottle()
   @ApiOperation({ summary: 'Get activity log for issue' })
   findActivity(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.issuesService.findActivity(id, user.id);

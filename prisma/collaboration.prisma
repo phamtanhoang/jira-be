@@ -56,5 +56,7 @@ model Activity {
   newValue  String?
   createdAt DateTime       @default(now())
 
-  @@index([issueId])
+  // Activity feed always queries `where issueId orderBy createdAt desc` —
+  // the compound index turns that into an index-only scan.
+  @@index([issueId, createdAt])
 }

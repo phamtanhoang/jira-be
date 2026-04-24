@@ -10,31 +10,12 @@ import {
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { memoryStorage } from 'multer';
-import { ENDPOINTS, MSG } from '@/core/constants';
+import { ENDPOINTS, MSG, UPLOAD_LIMITS, isAllowedMime } from '@/core/constants';
 import { CurrentUser } from '@/core/decorators';
 import { AuthUser } from '@/core/types';
 import { AttachmentsService } from './attachments.service';
-
-const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-const MAX_FILES = 10;
-
-const ALLOWED_MIMES = [
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'image/svg+xml',
-  'application/pdf',
-  'application/zip',
-  'application/x-zip-compressed',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'text/plain',
-  'text/csv',
-];
 
 // Issue-scoped routes: POST/GET /issues/:id/attachments
 @ApiTags('Attachments')
@@ -43,12 +24,13 @@ export class AttachmentsIssueController {
   constructor(private attachmentsService: AttachmentsService) {}
 
   @Post(ENDPOINTS.ISSUES.ATTACHMENTS)
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @UseInterceptors(
-    FilesInterceptor('files', MAX_FILES, {
+    FilesInterceptor('files', UPLOAD_LIMITS.ATTACHMENT.maxFiles, {
       storage: memoryStorage(),
-      limits: { fileSize: MAX_SIZE },
+      limits: { fileSize: UPLOAD_LIMITS.ATTACHMENT.maxSize },
       fileFilter: (_req, file, cb) => {
-        if (ALLOWED_MIMES.includes(file.mimetype)) {
+        if (isAllowedMime(UPLOAD_LIMITS.ATTACHMENT, file.mimetype)) {
           cb(null, true);
         } else {
           cb(new BadRequestException('File type not allowed'), false);

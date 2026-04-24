@@ -166,43 +166,46 @@ export class IssuesService {
   async findMyDashboard(userId: string) {
     const now = new Date();
     const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const recentActivityCutoff = new Date(
+      now.getTime() - 7 * 24 * 60 * 60 * 1000,
+    );
 
-    // All non-DONE issues assigned to me, across any workspace I'm a member of
-    const open = await this.prisma.issue.findMany({
-      where: {
-        assigneeId: userId,
-        boardColumn: { category: { not: StatusCategory.DONE } },
-        project: {
-          workspace: { members: { some: { userId } } },
+    // Parallelize the two findMany calls — they're independent, so running
+    // them sequentially would add a full round-trip of latency for no reason.
+    const [open, recent] = await Promise.all([
+      // All non-DONE issues assigned to me, across any workspace I'm in
+      this.prisma.issue.findMany({
+        where: {
+          assigneeId: userId,
+          boardColumn: { category: { not: StatusCategory.DONE } },
+          project: {
+            workspace: { members: { some: { userId } } },
+          },
         },
-      },
-      include: {
-        ...ISSUE_INCLUDE,
-        project: { select: { id: true, key: true, name: true } },
-      },
-      orderBy: [{ dueDate: 'asc' }, { updatedAt: 'desc' }],
-    });
+        include: {
+          ...ISSUE_INCLUDE,
+          project: { select: { id: true, key: true, name: true } },
+        },
+        orderBy: [{ dueDate: 'asc' }, { updatedAt: 'desc' }],
+      }),
+      // Recently-touched issues across projects I can access
+      this.prisma.issue.findMany({
+        where: {
+          updatedAt: { gte: recentActivityCutoff },
+          project: {
+            workspace: { members: { some: { userId } } },
+          },
+        },
+        include: ISSUE_INCLUDE,
+        orderBy: { updatedAt: 'desc' },
+        take: 10,
+      }),
+    ]);
 
     const overdue = open.filter((i) => i.dueDate && i.dueDate < now);
     const dueSoon = open.filter(
       (i) => i.dueDate && i.dueDate >= now && i.dueDate <= in7Days,
     );
-
-    // Issues updated in the last 7 days on projects I have access to
-    const recentActivityCutoff = new Date(
-      now.getTime() - 7 * 24 * 60 * 60 * 1000,
-    );
-    const recent = await this.prisma.issue.findMany({
-      where: {
-        updatedAt: { gte: recentActivityCutoff },
-        project: {
-          workspace: { members: { some: { userId } } },
-        },
-      },
-      include: ISSUE_INCLUDE,
-      orderBy: { updatedAt: 'desc' },
-      take: 10,
-    });
 
     return {
       assigned: open,

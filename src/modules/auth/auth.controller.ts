@@ -22,6 +22,7 @@ import {
   COOKIE_KEYS,
   ENDPOINTS,
   MSG,
+  UPLOAD_LIMITS,
   accessTokenCookieOptions,
   refreshTokenCookieOptions,
 } from '@/core/constants';
@@ -56,6 +57,9 @@ export class AuthController {
   @Public()
   @Post(E.VERIFY_EMAIL)
   @HttpCode(HttpStatus.OK)
+  // 5 attempts per 5 min — matches the OTP expiry window; defends against
+  // brute-forcing the 6-digit code.
+  @Throttle({ default: { ttl: 300000, limit: 5 } })
   @ApiOperation({ summary: 'Verify email with 6-digit OTP' })
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto);
@@ -89,6 +93,8 @@ export class AuthController {
   @Public()
   @Post(E.REFRESH)
   @HttpCode(HttpStatus.OK)
+  // 10/min — allow a small burst when several tabs refresh at once.
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @ApiOperation({ summary: 'Refresh access token' })
   async refresh(
     @Req() req: Request,
@@ -118,6 +124,7 @@ export class AuthController {
 
   @Post(E.LOGOUT)
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Logout and clear tokens' })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const cookies = req.cookies as Record<string, string> | undefined;
@@ -175,10 +182,11 @@ export class AuthController {
   }
 
   @Post('avatar')
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: 2 * 1024 * 1024 },
+      limits: { fileSize: UPLOAD_LIMITS.AVATAR.maxSize },
     }),
   )
   @ApiConsumes('multipart/form-data')

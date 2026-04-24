@@ -1,3 +1,4 @@
+export * from './assert-exists.util';
 export * from './auth.util';
 export * from './cookie.util';
 export * from './sanitize.util';

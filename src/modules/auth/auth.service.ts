@@ -5,7 +5,13 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ENV, MSG, USER_SELECT_FULL } from '@/core/constants';
+import {
+  ENV,
+  MSG,
+  UPLOAD_LIMITS,
+  USER_SELECT_FULL,
+  isAllowedMime,
+} from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { MailService } from '@/core/mail/mail.service';
 import {
@@ -27,14 +33,6 @@ import {
   UpdateProfileDto,
   VerifyEmailDto,
 } from './dto';
-
-const ALLOWED_AVATAR_MIMES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-]);
-const MAX_AVATAR_SIZE = 2 * 1024 * 1024; // 2MB
 
 @Injectable()
 export class AuthService {
@@ -301,10 +299,10 @@ export class AuthService {
     if (!file) {
       throw new BadRequestException(MSG.ERROR.INVALID_IMAGE_TYPE);
     }
-    if (!ALLOWED_AVATAR_MIMES.has(file.mimetype)) {
+    if (!isAllowedMime(UPLOAD_LIMITS.AVATAR, file.mimetype)) {
       throw new BadRequestException(MSG.ERROR.INVALID_IMAGE_TYPE);
     }
-    if (file.size > MAX_AVATAR_SIZE) {
+    if (file.size > UPLOAD_LIMITS.AVATAR.maxSize) {
       throw new BadRequestException(MSG.ERROR.IMAGE_TOO_LARGE);
     }
 

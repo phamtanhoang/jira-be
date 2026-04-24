@@ -29,7 +29,12 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
 
 @Module({
   imports: [
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 10 }]),
+    // Global default: 60 req/min (1 req/s average). Low enough to catch
+    // abusive bots, high enough that normal authenticated flows (bulk
+    // edits, dragging a bunch of issues, opening/closing modals) don't
+    // trip it. Endpoints that need stricter limits (auth, upload) apply
+    // their own @Throttle() decorator per-route.
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
     ScheduleModule.forRoot(),
     PrismaModule,
     LogsModule,

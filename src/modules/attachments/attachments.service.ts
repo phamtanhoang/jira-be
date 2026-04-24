@@ -1,12 +1,13 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { ActivityAction } from '@prisma/client';
 import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import { uploadFile, deleteFile, createSignedUrl } from '@/core/utils';
+import {
+  assertExists,
+  uploadFile,
+  deleteFile,
+  createSignedUrl,
+} from '@/core/utils';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 
@@ -23,11 +24,13 @@ export class AttachmentsService {
     userId: string,
     files: Express.Multer.File[],
   ) {
-    const issue = await this.prisma.issue.findUnique({
-      where: { id: issueId },
-      include: { project: { select: { workspaceId: true } } },
-    });
-    if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
+    const issue = assertExists(
+      await this.prisma.issue.findUnique({
+        where: { id: issueId },
+        include: { project: { select: { workspaceId: true } } },
+      }),
+      MSG.ERROR.ISSUE_NOT_FOUND,
+    );
 
     await this.workspacesService.assertMember(
       issue.project.workspaceId,
@@ -75,11 +78,13 @@ export class AttachmentsService {
   }
 
   async findByIssue(issueId: string, userId: string) {
-    const issue = await this.prisma.issue.findUnique({
-      where: { id: issueId },
-      include: { project: { select: { workspaceId: true } } },
-    });
-    if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
+    const issue = assertExists(
+      await this.prisma.issue.findUnique({
+        where: { id: issueId },
+        include: { project: { select: { workspaceId: true } } },
+      }),
+      MSG.ERROR.ISSUE_NOT_FOUND,
+    );
 
     await this.workspacesService.assertMember(
       issue.project.workspaceId,
@@ -104,14 +109,15 @@ export class AttachmentsService {
   }
 
   async getSignedUrl(attachmentId: string, userId: string) {
-    const attachment = await this.prisma.attachment.findUnique({
-      where: { id: attachmentId },
-      include: {
-        issue: { include: { project: { select: { workspaceId: true } } } },
-      },
-    });
-    if (!attachment)
-      throw new NotFoundException(MSG.ERROR.ATTACHMENT_NOT_FOUND);
+    const attachment = assertExists(
+      await this.prisma.attachment.findUnique({
+        where: { id: attachmentId },
+        include: {
+          issue: { include: { project: { select: { workspaceId: true } } } },
+        },
+      }),
+      MSG.ERROR.ATTACHMENT_NOT_FOUND,
+    );
 
     await this.workspacesService.assertMember(
       attachment.issue.project.workspaceId,
@@ -128,11 +134,12 @@ export class AttachmentsService {
   }
 
   async delete(attachmentId: string, userId: string) {
-    const attachment = await this.prisma.attachment.findUnique({
-      where: { id: attachmentId },
-    });
-    if (!attachment)
-      throw new NotFoundException(MSG.ERROR.ATTACHMENT_NOT_FOUND);
+    const attachment = assertExists(
+      await this.prisma.attachment.findUnique({
+        where: { id: attachmentId },
+      }),
+      MSG.ERROR.ATTACHMENT_NOT_FOUND,
+    );
 
     if (attachment.uploadedById !== userId) {
       throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);

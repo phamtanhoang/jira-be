@@ -31,4 +31,7 @@ model User {
 
   createdFeatureFlags FeatureFlag[]   @relation("FeatureFlagCreator")
   adminAuditLogs      AdminAuditLog[] @relation("AdminAudit")
+
+  // Admin analytics queries signups over a date range.
+  @@index([createdAt])
 }

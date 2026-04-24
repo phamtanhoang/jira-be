@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   Post,
   Put,
@@ -11,9 +12,10 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
 import { memoryStorage } from 'multer';
-import { ENDPOINTS } from '@/core/constants';
+import { ENDPOINTS, UPLOAD_LIMITS, isAllowedMime } from '@/core/constants';
 import { CurrentUser, Public, Roles } from '@/core/decorators';
 import type { AuthUser } from '@/core/types';
 import { SetSettingDto } from './dto/set-setting.dto';
@@ -21,22 +23,19 @@ import { SettingsService } from './settings.service';
 
 const E = ENDPOINTS.SETTINGS;
 
-const LOGO_MAX = 2 * 1024 * 1024; // 2MB
-const LOGO_MIMES = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/webp',
-  'image/svg+xml',
-  'image/gif',
-]);
-
 @ApiTags('Settings')
 @Controller(E.BASE)
 export class SettingsController {
   constructor(private settingsService: SettingsService) {}
 
+  // Public settings GETs change rarely (admin-toggled). A short Cache-Control
+  // keeps browsers + CDN edge from hammering us on every page navigation.
+  // 60s max-age is short enough that admin toggles propagate quickly; the
+  // stale-while-revalidate window lets cached responses keep serving while a
+  // fresh one is fetched in the background.
   @Public()
   @Get(E.APP_INFO)
+  @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
   @ApiOperation({ summary: 'Get app info (name, logo, description)' })
   getAppInfo() {
     return this.settingsService.getAppInfo();
@@ -44,6 +43,7 @@ export class SettingsController {
 
   @Public()
   @Get(E.APP_ANNOUNCEMENT)
+  @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
   @ApiOperation({
     summary: 'Get the announcement banner (null if not configured)',
   })
@@ -53,6 +53,7 @@ export class SettingsController {
 
   @Public()
   @Get(E.APP_MAINTENANCE)
+  @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
   @ApiOperation({
     summary: 'Get the maintenance-mode flag (null if not configured)',
   })
@@ -69,6 +70,7 @@ export class SettingsController {
 
   @Post(E.APP_INFO_LOGO)
   @Roles(Role.ADMIN)
+  @Throttle({ default: { ttl: 60000, limit: 3 } })
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Upload a new app logo and persist URL into app.info (Admin only)',
@@ -76,9 +78,9 @@ export class SettingsController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: LOGO_MAX },
+      limits: { fileSize: UPLOAD_LIMITS.LOGO.maxSize },
       fileFilter: (_req, file, cb) => {
-        if (LOGO_MIMES.has(file.mimetype)) {
+        if (isAllowedMime(UPLOAD_LIMITS.LOGO, file.mimetype)) {
           cb(null, true);
         } else {
           cb(new BadRequestException('File type not allowed'), false);
