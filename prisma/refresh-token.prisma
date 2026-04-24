@@ -1,10 +1,16 @@
 model RefreshToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  token      String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  // Session metadata for user-facing "active devices" UI. Populated on login
+  // and updated on refresh so "last used" stays accurate. All nullable so
+  // legacy rows keep working.
+  userAgent  String?
+  ip         String?
+  lastUsedAt DateTime @default(now())
 
   @@index([userId])
 }

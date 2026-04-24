@@ -9,6 +9,10 @@ export const ENDPOINTS = {
     FORGOT_PASSWORD: 'forgot-password',
     RESET_PASSWORD: 'reset-password',
     ME: 'me',
+    SESSIONS: 'sessions',
+    SESSION_BY_ID: 'sessions/:sessionId',
+    SESSIONS_REVOKE_OTHERS: 'sessions/revoke-others',
+    SESSIONS_REVOKE_ALL: 'sessions/revoke-all',
   },
   SETTINGS: {
     BASE: 'settings',

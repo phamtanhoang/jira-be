@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -127,7 +128,7 @@ export class AuthService {
     return { message: MSG.SUCCESS.EMAIL_VERIFIED };
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, meta?: SessionMeta) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -146,7 +147,7 @@ export class AuthService {
       throw new UnauthorizedException(MSG.ERROR.ACCOUNT_DEACTIVATED);
     }
 
-    const tokens = await this.generateTokens(user.id, user.email);
+    const tokens = await this.generateTokens(user.id, user.email, meta);
     return {
       ...tokens,
       user: {
@@ -159,7 +160,7 @@ export class AuthService {
     };
   }
 
-  async refresh(oldRefreshToken: string) {
+  async refresh(oldRefreshToken: string, meta?: SessionMeta) {
     const record = await this.prisma.refreshToken.findUnique({
       where: { token: oldRefreshToken },
       include: { user: true },
@@ -174,12 +175,23 @@ export class AuthService {
       throw new UnauthorizedException(MSG.ERROR.REFRESH_TOKEN_INVALID);
     }
 
-    // Rotate: delete old, create new
+    // Rotate: delete old, create new. Carry the device metadata from the old
+    // row forward unless the request supplies something fresher — prevents
+    // refresh-on-new-network from silently erasing "original device" info.
     await this.prisma.refreshToken.delete({
       where: { id: record.id },
     });
 
-    const tokens = await this.generateTokens(record.user.id, record.user.email);
+    const mergedMeta: SessionMeta = {
+      userAgent: meta?.userAgent ?? record.userAgent ?? undefined,
+      ip: meta?.ip ?? record.ip ?? undefined,
+    };
+
+    const tokens = await this.generateTokens(
+      record.user.id,
+      record.user.email,
+      mergedMeta,
+    );
     return tokens;
   }
 
@@ -352,7 +364,74 @@ export class AuthService {
     return { message: MSG.SUCCESS.LOGOUT };
   }
 
-  private async generateTokens(userId: string, email: string) {
+  // ─── My sessions ─────────────────────────────────────
+
+  /**
+   * Returns active (not yet expired) sessions for the current user. The
+   * session matching `currentToken` is flagged with `isCurrent: true` so the
+   * FE can highlight "this device". Raw token strings are never returned.
+   */
+  async listMySessions(userId: string, currentToken: string | null) {
+    const sessions = await this.prisma.refreshToken.findMany({
+      where: { userId, expiresAt: { gt: new Date() } },
+      select: {
+        id: true,
+        createdAt: true,
+        expiresAt: true,
+        lastUsedAt: true,
+        userAgent: true,
+        ip: true,
+        token: true,
+      },
+      orderBy: { lastUsedAt: 'desc' },
+    });
+    return sessions.map((s) => {
+      const { token, ...rest } = s;
+      return { ...rest, isCurrent: token === currentToken };
+    });
+  }
+
+  async revokeMySession(
+    userId: string,
+    sessionId: string,
+    currentToken: string | null,
+  ): Promise<boolean> {
+    const session = await this.prisma.refreshToken.findUnique({
+      where: { id: sessionId },
+      select: { id: true, userId: true, token: true },
+    });
+    if (!session || session.userId !== userId) {
+      throw new NotFoundException(MSG.ERROR.REFRESH_TOKEN_NOT_FOUND);
+    }
+    await this.prisma.refreshToken.delete({ where: { id: sessionId } });
+    return session.token === currentToken;
+  }
+
+  async revokeOtherSessions(
+    userId: string,
+    currentToken: string | null,
+  ): Promise<number> {
+    const result = await this.prisma.refreshToken.deleteMany({
+      where: {
+        userId,
+        ...(currentToken ? { token: { not: currentToken } } : {}),
+      },
+    });
+    return result.count;
+  }
+
+  async revokeAllMySessions(userId: string): Promise<number> {
+    const result = await this.prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+    return result.count;
+  }
+
+  private async generateTokens(
+    userId: string,
+    email: string,
+    meta?: SessionMeta,
+  ) {
     const accessExpiry = ENV.JWT_ACCESS_TOKEN_EXPIRATION;
     const refreshExpiry = ENV.JWT_REFRESH_TOKEN_EXPIRATION;
 
@@ -367,6 +446,8 @@ export class AuthService {
         token: refreshTokenValue,
         userId,
         expiresAt: calculateExpiryDate(refreshExpiry),
+        userAgent: meta?.userAgent?.slice(0, 512),
+        ip: meta?.ip,
       },
     });
 
@@ -377,3 +458,8 @@ export class AuthService {
     };
   }
 }
+
+export type SessionMeta = {
+  userAgent?: string;
+  ip?: string;
+};

@@ -2,9 +2,11 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Patch,
   Post,
   Req,
@@ -28,7 +30,7 @@ import {
 } from '@/core/constants';
 import { CurrentUser, Public } from '@/core/decorators';
 import { AuthUser } from '@/core/types';
-import { AuthService } from './auth.service';
+import { AuthService, type SessionMeta } from './auth.service';
 import {
   ChangePasswordDto,
   ForgotPasswordDto,
@@ -72,9 +74,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Login and receive JWT tokens' })
   async login(
     @Body() dto: LoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const tokens = await this.authService.login(dto);
+    const tokens = await this.authService.login(dto, extractSessionMeta(req));
 
     res.cookie(
       COOKIE_KEYS.ACCESS_TOKEN,
@@ -106,7 +109,10 @@ export class AuthController {
       throw new UnauthorizedException(MSG.ERROR.REFRESH_TOKEN_NOT_FOUND);
     }
 
-    const tokens = await this.authService.refresh(refreshToken);
+    const tokens = await this.authService.refresh(
+      refreshToken,
+      extractSessionMeta(req),
+    );
 
     res.cookie(
       COOKIE_KEYS.ACCESS_TOKEN,
@@ -203,4 +209,80 @@ export class AuthController {
     }
     return this.authService.uploadAvatar(user.id, file);
   }
+
+  // ─── Sessions (user-scoped device management) ──────────
+
+  @Get(E.SESSIONS)
+  @ApiOperation({
+    summary: 'List active sessions (devices) for the current user',
+  })
+  listSessions(@CurrentUser() user: AuthUser, @Req() req: Request) {
+    return this.authService.listMySessions(user.id, currentRefreshToken(req));
+  }
+
+  @Post(E.SESSIONS_REVOKE_OTHERS)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Sign out every session except the current one',
+  })
+  async revokeOthers(@CurrentUser() user: AuthUser, @Req() req: Request) {
+    const count = await this.authService.revokeOtherSessions(
+      user.id,
+      currentRefreshToken(req),
+    );
+    return { message: MSG.SUCCESS.SESSIONS_REVOKED, count };
+  }
+
+  @Post(E.SESSIONS_REVOKE_ALL)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Sign out every session including the current one',
+  })
+  async revokeAll(
+    @CurrentUser() user: AuthUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const count = await this.authService.revokeAllMySessions(user.id);
+    res.clearCookie(COOKIE_KEYS.ACCESS_TOKEN);
+    res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, { path: '/' });
+    return { message: MSG.SUCCESS.SESSIONS_REVOKED, count };
+  }
+
+  @Delete(E.SESSION_BY_ID)
+  @ApiOperation({ summary: 'Sign out a specific session' })
+  async revokeSession(
+    @Param('sessionId') sessionId: string,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const currentToken = currentRefreshToken(req);
+    const wasCurrent = await this.authService.revokeMySession(
+      user.id,
+      sessionId,
+      currentToken,
+    );
+    if (wasCurrent) {
+      res.clearCookie(COOKIE_KEYS.ACCESS_TOKEN);
+      res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, { path: '/' });
+    }
+    return { message: MSG.SUCCESS.SESSION_REVOKED, wasCurrent };
+  }
+}
+
+function currentRefreshToken(req: Request): string | null {
+  const cookies = req.cookies as Record<string, string> | undefined;
+  return cookies?.[COOKIE_KEYS.REFRESH_TOKEN] ?? null;
+}
+
+function extractSessionMeta(req: Request): SessionMeta {
+  // Trust `X-Forwarded-For` only if set by the ingress — Express respects
+  // `app.set('trust proxy', ...)` to populate `req.ip`. Fallback to socket
+  // remoteAddress for local dev where no proxy is in front.
+  const ua = req.headers['user-agent'];
+  const ip = req.ip ?? req.socket?.remoteAddress ?? undefined;
+  return {
+    userAgent: typeof ua === 'string' ? ua : undefined,
+    ip,
+  };
 }
