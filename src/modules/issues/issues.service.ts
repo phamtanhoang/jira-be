@@ -189,7 +189,9 @@ export class IssuesService {
     );
 
     // Issues updated in the last 7 days on projects I have access to
-    const recentActivityCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const recentActivityCutoff = new Date(
+      now.getTime() - 7 * 24 * 60 * 60 * 1000,
+    );
     const recent = await this.prisma.issue.findMany({
       where: {
         updatedAt: { gte: recentActivityCutoff },

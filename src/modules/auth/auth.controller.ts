@@ -157,17 +157,16 @@ export class AuthController {
 
   @Patch(E.ME)
   @ApiOperation({ summary: 'Update current user profile (name, image)' })
-  updateProfile(
-    @CurrentUser() user: AuthUser,
-    @Body() dto: UpdateProfileDto,
-  ) {
+  updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
     return this.authService.updateProfile(user.id, dto);
   }
 
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { ttl: 60000, limit: 5 } })
-  @ApiOperation({ summary: 'Change current user password (requires current password)' })
+  @ApiOperation({
+    summary: 'Change current user password (requires current password)',
+  })
   changePassword(
     @CurrentUser() user: AuthUser,
     @Body() dto: ChangePasswordDto,
@@ -183,7 +182,10 @@ export class AuthController {
     }),
   )
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload a new avatar for the current user (JPG/PNG/GIF/WEBP, max 2MB)' })
+  @ApiOperation({
+    summary:
+      'Upload a new avatar for the current user (JPG/PNG/GIF/WEBP, max 2MB)',
+  })
   uploadAvatar(
     @CurrentUser() user: AuthUser,
     @UploadedFile() file: Express.Multer.File,
