@@ -6,12 +6,16 @@ import {
 import { ActivityAction } from '@prisma/client';
 import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import { assertProjectAccess } from '@/core/utils';
+import { assertProjectAccess, extractMentions } from '@/core/utils';
+import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { CreateCommentDto, UpdateCommentDto } from './dto';
 
 @Injectable()
 export class CommentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   async create(issueId: string, userId: string, dto: CreateCommentDto) {
     const issue = await this.prisma.issue.findUnique({
@@ -46,6 +50,47 @@ export class CommentsService {
         userId,
         action: ActivityAction.COMMENTED,
       },
+    });
+
+    // Fan-out: reporter + assignee + watchers, minus the comment author.
+    const watcherRows = await this.prisma.issueWatcher.findMany({
+      where: { issueId },
+      select: { userId: true },
+    });
+    const baseRecipients = [
+      issue.reporterId,
+      issue.assigneeId,
+      ...watcherRows.map((w) => w.userId),
+    ].filter((id): id is string => !!id && id !== userId);
+    const baseSet = new Set(baseRecipients);
+
+    this.notifications.createMany(baseRecipients, {
+      type: 'COMMENT_CREATED',
+      title: `New comment on ${issue.key}`,
+      body: stripHtmlPreview(dto.content),
+      link: `/issues/${issue.key}`,
+    });
+
+    // Auto-subscribe the commenter — keeps them in the loop on subsequent
+    // activity. Idempotent upsert; failure is silently ignored.
+    void this.prisma.issueWatcher
+      .upsert({
+        where: { issueId_userId: { issueId, userId } },
+        update: {},
+        create: { issueId, userId },
+      })
+      .catch(() => null);
+
+    // Mentions get a separate, stronger notification — but only for people
+    // NOT already covered by the base fan-out (avoid duplicate pings).
+    const mentionedIds = extractMentions(dto.content).filter(
+      (id) => id !== userId && !baseSet.has(id),
+    );
+    this.notifications.createMany(mentionedIds, {
+      type: 'MENTION_COMMENT',
+      title: `You were mentioned on ${issue.key}`,
+      body: stripHtmlPreview(dto.content),
+      link: `/issues/${issue.key}`,
     });
 
     return comment;
@@ -102,4 +147,14 @@ export class CommentsService {
 
     return this.prisma.comment.delete({ where: { id: commentId } });
   }
+}
+
+// Cheap one-line preview for notification bodies. Strip HTML tags, collapse
+// whitespace, cap at 140 chars. Doesn't need to be perfect — it's a teaser.
+function stripHtmlPreview(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 140);
 }

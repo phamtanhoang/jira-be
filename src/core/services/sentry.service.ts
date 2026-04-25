@@ -14,8 +14,7 @@ import { ENV } from '@/core/constants';
 @Injectable()
 export class SentryService {
   private readonly logger = new Logger(SentryService.name);
-  private readonly enabled =
-    !!ENV.SENTRY_DSN && process.env.NODE_ENV === 'production';
+  private readonly enabled = !!ENV.SENTRY_DSN && ENV.IS_PRODUCTION;
 
   captureException(
     exception: unknown,

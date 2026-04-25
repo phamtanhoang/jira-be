@@ -23,23 +23,68 @@ model Issue {
   boardColumn   BoardColumn?  @relation(fields: [boardColumnId], references: [id])
   position      Int           @default(0)
   storyPoints   Int?
+  // Phase 2.3 — time tracking. Both stored as seconds; UI parses "2h 30m"
+  // into total seconds. Nullable so existing rows stay valid.
+  originalEstimate  Int?
+  remainingEstimate Int?
   dueDate       DateTime?
   startDate     DateTime?
   completedAt   DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  labels      IssueLabel[]
-  comments    Comment[]
-  attachments Attachment[]
-  worklogs    Worklog[]
-  activities  Activity[]
+  labels        IssueLabel[]
+  comments      Comment[]
+  attachments   Attachment[]
+  worklogs      Worklog[]
+  activities    Activity[]
+  stars         IssueStar[]
+  watchers      IssueWatcher[]
+  outboundLinks IssueLink[]   @relation("IssueLinkSource")
+  inboundLinks  IssueLink[]   @relation("IssueLinkTarget")
 
   @@index([projectId])
   @@index([assigneeId])
   @@index([sprintId])
   @@index([boardColumnId])
   @@index([epicId])
+}
+
+model IssueStar {
+  issueId   String
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("IssueStarUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([issueId, userId])
+  @@index([userId, createdAt])
+}
+
+model IssueWatcher {
+  issueId   String
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("IssueWatcherUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([issueId, userId])
+  @@index([userId])
+}
+
+model IssueLink {
+  id            String        @id @default(uuid())
+  sourceIssueId String
+  source        Issue         @relation("IssueLinkSource", fields: [sourceIssueId], references: [id], onDelete: Cascade)
+  targetIssueId String
+  target        Issue         @relation("IssueLinkTarget", fields: [targetIssueId], references: [id], onDelete: Cascade)
+  type          IssueLinkType
+  createdAt     DateTime      @default(now())
+
+  // No two identical links between the same pair + type (idempotent UI).
+  @@unique([sourceIssueId, targetIssueId, type])
+  @@index([sourceIssueId])
+  @@index([targetIssueId])
 }
 
 model Label {

@@ -1,0 +1,17 @@
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  // Bell badge query is `where userId = X AND readAt IS NULL` — the
+  // partial-ish compound index keeps unread lookups index-only. The
+  // (userId, createdAt) index serves the paginated full list view.
+  @@index([userId, readAt, createdAt])
+  @@index([userId, createdAt])
+}

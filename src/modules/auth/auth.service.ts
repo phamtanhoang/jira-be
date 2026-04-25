@@ -160,6 +160,54 @@ export class AuthService {
     };
   }
 
+  /**
+   * OAuth login: upsert by email so an existing password account silently
+   * links to the same user when they SSO with the matching email. New users
+   * land here with no password (Google/GitHub becomes their only sign-in
+   * method until they set one via password reset).
+   */
+  async loginWithOAuth(
+    profile: { email: string; name: string | null; image: string | null },
+    meta?: SessionMeta,
+  ) {
+    const email = profile.email.toLowerCase();
+    let user = await this.prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          name: profile.name,
+          image: profile.image,
+          // OAuth-issued accounts are pre-verified — the provider already
+          // confirmed the email.
+          emailVerified: new Date(),
+        },
+      });
+    } else if (!user.active) {
+      throw new UnauthorizedException(MSG.ERROR.ACCOUNT_DEACTIVATED);
+    } else if (!user.emailVerified) {
+      // Existing account still pending email-OTP verification: the OAuth
+      // success itself proves email ownership, so flip the flag now.
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerified: new Date() },
+      });
+    }
+
+    const tokens = await this.generateTokens(user.id, user.email, meta);
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        role: user.role,
+      },
+    };
+  }
+
   async refresh(oldRefreshToken: string, meta?: SessionMeta) {
     const record = await this.prisma.refreshToken.findUnique({
       where: { token: oldRefreshToken },

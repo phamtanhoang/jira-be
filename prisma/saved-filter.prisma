@@ -1,0 +1,18 @@
+model SavedFilter {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  ownerId   String
+  owner     User     @relation("SavedFilterOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  name      String
+  // Free-form JSON of the BoardFilters shape (search, types, priorities,
+  // assigneeIds...). Stored as Json so the FE can extend without a schema
+  // migration each time we add a filter dimension.
+  payload   Json
+  shared    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, shared])
+  @@index([ownerId])
+}

@@ -19,8 +19,11 @@ import { DebugModule } from '@/modules/debug/debug.module';
 import { FeatureFlagsModule } from '@/modules/feature-flags/feature-flags.module';
 import { IssuesModule } from '@/modules/issues/issues.module';
 import { LabelsModule } from '@/modules/labels/labels.module';
+import { IssueTemplatesModule } from '@/modules/issue-templates/issue-templates.module';
 import { LogsModule } from '@/modules/logs/logs.module';
+import { NotificationsModule } from '@/modules/notifications/notifications.module';
 import { ProjectsModule } from '@/modules/projects/projects.module';
+import { SavedFiltersModule } from '@/modules/saved-filters/saved-filters.module';
 import { SettingsModule } from '@/modules/settings/settings.module';
 import { SprintsModule } from '@/modules/sprints/sprints.module';
 import { UsersModule } from '@/modules/users/users.module';
@@ -52,6 +55,9 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     UsersModule,
     FeatureFlagsModule,
     AdminAuditModule,
+    NotificationsModule,
+    SavedFiltersModule,
+    IssueTemplatesModule,
     DebugModule,
   ],
   providers: [

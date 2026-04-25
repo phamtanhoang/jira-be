@@ -13,6 +13,11 @@ export const ENDPOINTS = {
     SESSION_BY_ID: 'sessions/:sessionId',
     SESSIONS_REVOKE_OTHERS: 'sessions/revoke-others',
     SESSIONS_REVOKE_ALL: 'sessions/revoke-all',
+    OAUTH_GOOGLE: 'google',
+    OAUTH_GOOGLE_CALLBACK: 'google/callback',
+    OAUTH_GITHUB: 'github',
+    OAUTH_GITHUB_CALLBACK: 'github/callback',
+    OAUTH_PROVIDERS: 'oauth/providers',
   },
   SETTINGS: {
     BASE: 'settings',
@@ -61,6 +66,13 @@ export const ENDPOINTS = {
     ATTACHMENTS: ':id/attachments',
     WORKLOGS: ':id/worklogs',
     ACTIVITY: ':id/activity',
+    STAR: ':id/star',
+    STARRED: 'me/starred',
+    WATCH: ':id/watch',
+    WATCHERS: ':id/watchers',
+    LINKS: ':id/links',
+    LINK_BY_ID: ':id/links/:linkId',
+    EXPORT_CSV: 'export.csv',
   },
   LABELS: {
     BASE: 'labels',
@@ -110,5 +122,24 @@ export const ENDPOINTS = {
     BASE: 'feature-flags',
     BY_ID: ':id',
     ME: 'me',
+  },
+  SAVED_FILTERS: {
+    BASE: 'saved-filters',
+    BY_ID: ':id',
+  },
+  ISSUE_TEMPLATES: {
+    BASE: 'issue-templates',
+    BY_ID: ':id',
+  },
+  ISSUE_LINKS: {
+    BASE: 'issue-links',
+    BY_ID: ':id',
+  },
+  NOTIFICATIONS: {
+    BASE: 'notifications',
+    BY_ID: ':id',
+    READ: ':id/read',
+    READ_ALL: 'read-all',
+    UNREAD_COUNT: 'unread-count',
   },
 } as const;

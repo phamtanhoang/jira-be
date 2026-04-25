@@ -76,3 +76,10 @@ enum MailStatus {
   SENT
   FAILED
 }
+
+enum IssueLinkType {
+  BLOCKS
+  RELATES
+  DUPLICATES
+  CLONED_FROM
+}

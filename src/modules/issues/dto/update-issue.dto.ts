@@ -53,6 +53,18 @@ export class UpdateIssueDto {
   @IsOptional()
   storyPoints?: number | null;
 
+  @ApiPropertyOptional({ description: 'Original time estimate in seconds' })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  originalEstimate?: number | null;
+
+  @ApiPropertyOptional({ description: 'Remaining time estimate in seconds' })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  remainingEstimate?: number | null;
+
   @ApiPropertyOptional()
   @IsDateString()
   @IsOptional()

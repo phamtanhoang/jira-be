@@ -89,6 +89,9 @@ export const LOG_SKIP_GET_ROUTES = [
   // → page fetch gets logged → admin sees their own fetch next visit).
   '/logs',
   '/admin/audit',
+  // The bell badge polls these — keep them out of the request log to avoid
+  // a mountain of "GET /notifications/unread-count 200" rows.
+  '/notifications/unread-count',
 ];
 
 /**

@@ -16,10 +16,12 @@ model Project {
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
-  members ProjectMember[]
-  board   Board?
-  issues  Issue[]
-  labels  Label[]
+  members       ProjectMember[]
+  board         Board?
+  issues        Issue[]
+  labels        Label[]
+  savedFilters  SavedFilter[]
+  issueTemplates IssueTemplate[]
 
   @@unique([workspaceId, key])
   @@index([workspaceId])

@@ -13,8 +13,10 @@ import {
   Res,
   UnauthorizedException,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -23,6 +25,7 @@ import { memoryStorage } from 'multer';
 import {
   COOKIE_KEYS,
   ENDPOINTS,
+  ENV,
   MSG,
   UPLOAD_LIMITS,
   accessTokenCookieOptions,
@@ -31,6 +34,9 @@ import {
 import { CurrentUser, Public } from '@/core/decorators';
 import { AuthUser } from '@/core/types';
 import { AuthService, type SessionMeta } from './auth.service';
+import { isGithubConfigured } from './strategies/github.strategy';
+import { isGoogleConfigured } from './strategies/google.strategy';
+import type { OAuthProfile } from './strategies/oauth.types';
 import {
   ChangePasswordDto,
   ForgotPasswordDto,
@@ -162,6 +168,88 @@ export class AuthController {
     return this.authService.resetPassword(dto);
   }
 
+  // ─── OAuth ─────────────────────────────────────────────
+
+  @Public()
+  @Get(E.OAUTH_PROVIDERS)
+  @ApiOperation({
+    summary: 'Which OAuth providers are configured (drives FE button visibility)',
+  })
+  oauthProviders() {
+    return {
+      google: isGoogleConfigured(),
+      github: isGithubConfigured(),
+    };
+  }
+
+  @Public()
+  @Get(E.OAUTH_GOOGLE)
+  @UseGuards(AuthGuard('google'))
+  @ApiOperation({ summary: 'Start Google OAuth flow' })
+  // The guard performs the redirect to Google; this handler is never reached.
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  googleAuth() {}
+
+  @Public()
+  @Get(E.OAUTH_GOOGLE_CALLBACK)
+  @UseGuards(AuthGuard('google'))
+  @ApiOperation({ summary: 'Google OAuth callback — sets cookies, redirects' })
+  async googleCallback(
+    @Req() req: Request,
+    @Res({ passthrough: false }) res: Response,
+  ) {
+    return this.handleOAuthCallback(req, res);
+  }
+
+  @Public()
+  @Get(E.OAUTH_GITHUB)
+  @UseGuards(AuthGuard('github'))
+  @ApiOperation({ summary: 'Start GitHub OAuth flow' })
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  githubAuth() {}
+
+  @Public()
+  @Get(E.OAUTH_GITHUB_CALLBACK)
+  @UseGuards(AuthGuard('github'))
+  @ApiOperation({ summary: 'GitHub OAuth callback — sets cookies, redirects' })
+  async githubCallback(
+    @Req() req: Request,
+    @Res({ passthrough: false }) res: Response,
+  ) {
+    return this.handleOAuthCallback(req, res);
+  }
+
+  private async handleOAuthCallback(req: Request, res: Response) {
+    const profile = req.user as OAuthProfile | undefined;
+    const frontend = resolveFrontendUrl();
+    if (!profile) {
+      return res.redirect(`${frontend}/sign-in?error=oauth_failed`);
+    }
+    try {
+      const tokens = await this.authService.loginWithOAuth(
+        profile,
+        extractSessionMeta(req),
+      );
+      res.cookie(
+        COOKIE_KEYS.ACCESS_TOKEN,
+        tokens.accessToken,
+        accessTokenCookieOptions(tokens.expiresIn),
+      );
+      res.cookie(
+        COOKIE_KEYS.REFRESH_TOKEN,
+        tokens.refreshToken,
+        refreshTokenCookieOptions(),
+      );
+      return res.redirect(`${frontend}/dashboard`);
+    } catch (err) {
+      const code =
+        err instanceof Error && err.message
+          ? encodeURIComponent(err.message)
+          : 'oauth_failed';
+      return res.redirect(`${frontend}/sign-in?error=${code}`);
+    }
+  }
+
   @Get(E.ME)
   @ApiOperation({ summary: 'Get current authenticated user' })
   getMe(@CurrentUser() user: AuthUser) {
@@ -273,6 +361,16 @@ export class AuthController {
 function currentRefreshToken(req: Request): string | null {
   const cookies = req.cookies as Record<string, string> | undefined;
   return cookies?.[COOKIE_KEYS.REFRESH_TOKEN] ?? null;
+}
+
+// Pick where to land the user after OAuth completes. Prefer the explicit
+// FRONTEND_URL env, fall back to the first CORS_ORIGIN entry, then localhost
+// so dev still works without configuration.
+function resolveFrontendUrl(): string {
+  if (ENV.FRONTEND_URL) return ENV.FRONTEND_URL.replace(/\/$/, '');
+  const firstOrigin = ENV.CORS_ORIGIN?.split(',')[0]?.trim();
+  if (firstOrigin) return firstOrigin.replace(/\/$/, '');
+  return 'http://localhost:3000';
 }
 
 function extractSessionMeta(req: Request): SessionMeta {

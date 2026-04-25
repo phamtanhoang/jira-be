@@ -28,6 +28,10 @@ model User {
   attachments Attachment[] @relation("AttachmentUploader")
   worklogs    Worklog[]    @relation("WorklogUser")
   activities  Activity[]   @relation("ActivityUser")
+  starredIssues IssueStar[] @relation("IssueStarUser")
+  watchedIssues IssueWatcher[] @relation("IssueWatcherUser")
+  notifications Notification[] @relation("NotificationRecipient")
+  savedFilters  SavedFilter[]  @relation("SavedFilterOwner")
 
   createdFeatureFlags FeatureFlag[]   @relation("FeatureFlagCreator")
   adminAuditLogs      AdminAuditLog[] @relation("AdminAudit")
