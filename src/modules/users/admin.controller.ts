@@ -38,7 +38,10 @@ export class AdminController {
     summary: 'Top routes by count with p50/p95/p99 latency and error counts',
   })
   getMetrics(@Query() query: QueryMetricsDto) {
-    return this.adminService.getMetrics(query.sinceHours ?? 24, query.take ?? 10);
+    return this.adminService.getMetrics(
+      query.sinceHours ?? 24,
+      query.take ?? 10,
+    );
   }
 
   @Get(E.USER_ACTIVITY)
