@@ -71,7 +71,7 @@ export class MailLogController {
       html: testEmailHtml(),
       type: MailType.OTHER,
     });
-    return { message: MSG.SUCCESS.MAIL_RETRIED };
+    return { message: MSG.SUCCESS.MAIL_TEST_SENT };
   }
 }
 
