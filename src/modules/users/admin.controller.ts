@@ -38,7 +38,7 @@ export class AdminController {
     summary: 'Top routes by count with p50/p95/p99 latency and error counts',
   })
   getMetrics(@Query() query: QueryMetricsDto) {
-    return this.adminService.getMetrics(query.sinceHours ?? 24);
+    return this.adminService.getMetrics(query.sinceHours ?? 24, query.take ?? 10);
   }
 
   @Get(E.USER_ACTIVITY)
@@ -47,7 +47,10 @@ export class AdminController {
       'What end-users actually do in the app. Aggregates RequestLog over the given window, excluding admin traffic.',
   })
   getUserActivity(@Query() query: QueryMetricsDto) {
-    return this.adminService.getUserActivity(query.sinceHours ?? 168);
+    return this.adminService.getUserActivity(
+      query.sinceHours ?? 168,
+      query.take ?? 30,
+    );
   }
 
   @Get(E.WORKSPACES)

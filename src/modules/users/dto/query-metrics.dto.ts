@@ -12,4 +12,19 @@ export class QueryMetricsDto {
   @Max(168)
   @IsOptional()
   sinceHours?: number;
+
+  @ApiPropertyOptional({
+    example: 30,
+    minimum: 1,
+    maximum: 200,
+    description: 'How many rows to return for the long lists (slowest/recent).',
+  })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? parseInt(value, 10) : value,
+  )
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  @IsOptional()
+  take?: number;
 }

@@ -265,8 +265,11 @@ export class AdminService {
    * count with p50/p95/p99 latency + error count, plus method/status
    * distributions.
    */
-  async getMetrics(sinceHours = 24) {
+  async getMetrics(sinceHours = 24, take = 10) {
     const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
+    // Clamp: bigger pages just slow down the percentile rollup without adding
+    // value to the UI.
+    const limit = Math.min(Math.max(take, 1), 100);
 
     const [topRoutesRaw, methodsRaw, statusesRaw, slowestRaw, errorTrendRaw] =
       await Promise.all([
@@ -282,7 +285,7 @@ export class AdminService {
           AND "route" IS NOT NULL
         GROUP BY "route"
         ORDER BY "count" DESC
-        LIMIT 10
+        LIMIT ${limit}
       `,
         this.prisma.requestLog.groupBy({
           by: ['method'],
@@ -303,7 +306,7 @@ export class AdminService {
         WHERE "createdAt" >= ${since}
           AND "durationMs" IS NOT NULL
         ORDER BY "durationMs" DESC NULLS LAST
-        LIMIT 10
+        LIMIT ${limit}
       `,
         this.prisma.$queryRaw<HourlyErrorRow[]>`
         SELECT DATE_TRUNC('hour', "createdAt") AS "bucket",
@@ -354,8 +357,12 @@ export class AdminService {
    * Aggregate user activity from RequestLog, excluding admin-origin traffic.
    * Gives admins a read on what end-users actually do in the app.
    */
-  async getUserActivity(sinceHours = 168) {
+  async getUserActivity(sinceHours = 168, take = 30) {
     const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
+    // Top* lists max out smaller than recent — they're aggregations, not a
+    // feed, so 50 is plenty even at "load more" max.
+    const recentLimit = Math.min(Math.max(take, 1), 200);
+    const topLimit = Math.min(Math.max(take, 15), 50);
 
     // Base filter: skip null users (unauthenticated probes) and admin routes
     const baseWhere: Prisma.RequestLogWhereInput = {
@@ -372,7 +379,7 @@ export class AdminService {
         _count: { _all: true },
         _max: { createdAt: true },
         orderBy: { _count: { userId: 'desc' } },
-        take: 15,
+        take: topLimit,
       }),
       // Top-used app endpoints
       this.prisma.requestLog.groupBy({
@@ -380,7 +387,7 @@ export class AdminService {
         where: { ...baseWhere, route: { not: null } },
         _count: { _all: true },
         orderBy: { _count: { route: 'desc' } },
-        take: 15,
+        take: topLimit,
       }),
       // Most recent app actions across all users (for an activity feed)
       this.prisma.requestLog.findMany({
@@ -395,7 +402,7 @@ export class AdminService {
           createdAt: true,
         },
         orderBy: { createdAt: 'desc' },
-        take: 30,
+        take: recentLimit,
       }),
       this.prisma.requestLog.aggregate({
         where: baseWhere,
