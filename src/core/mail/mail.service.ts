@@ -224,13 +224,20 @@ export class MailService {
     html: string;
   }): Promise<string | null> {
     const transporter = this.getSmtpTransporter(args.cfg.smtp);
-    const info = await transporter.sendMail({
+    // Nodemailer's `SentMessageInfo` is typed as `any` in @types/nodemailer;
+    // assign to `unknown` and probe the shape we actually care about so the
+    // no-unsafe-* lints stay clean and we never propagate `any` outward.
+    const info: unknown = await transporter.sendMail({
       from: args.from,
       to: args.to,
       subject: args.subject,
       html: args.html,
     });
-    return info.messageId ?? null;
+    if (info && typeof info === 'object' && 'messageId' in info) {
+      const id = (info as { messageId: unknown }).messageId;
+      if (typeof id === 'string') return id;
+    }
+    return null;
   }
 
   /**

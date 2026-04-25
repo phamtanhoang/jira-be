@@ -132,13 +132,20 @@ export class SettingsService {
   }
 }
 
+/**
+ * The Prisma JSON typings (`InputJsonValue`, `JsonValue`) include
+ * `{ toJSON(): unknown }` which trips up structural narrowing. The helpers
+ * below downcast to a `Record<string, unknown>` first and treat everything
+ * else as opaque — admin-controlled JSON, so we trust the structure but stay
+ * defensive on the password field.
+ */
 function redactAppEmail(value: Prisma.JsonValue): Prisma.JsonValue {
-  if (!isPlainObject(value)) return value;
-  const v = value as Record<string, unknown>;
-  if (!isPlainObject(v.smtp)) return v as Prisma.JsonValue;
-  const smtp = v.smtp as Record<string, unknown>;
+  const obj = asPlainObject(value);
+  if (!obj) return value;
+  const smtp = asPlainObject(obj.smtp);
+  if (!smtp) return obj as Prisma.JsonValue;
   return {
-    ...v,
+    ...obj,
     smtp: {
       ...smtp,
       password: smtp.password ? PASSWORD_PLACEHOLDER : '',
@@ -150,16 +157,13 @@ function mergeAppEmailPassword(
   incoming: Prisma.InputJsonValue,
   existing: Prisma.JsonValue | undefined,
 ): Prisma.InputJsonValue {
-  if (!isPlainObject(incoming)) return incoming;
-  const next = incoming as Record<string, unknown>;
-  if (!isPlainObject(next.smtp)) return incoming;
-  const nextSmtp = next.smtp as Record<string, unknown>;
+  const next = asPlainObject(incoming);
+  if (!next) return incoming;
+  const nextSmtp = asPlainObject(next.smtp);
+  if (!nextSmtp) return incoming;
   if (nextSmtp.password !== PASSWORD_PLACEHOLDER) return incoming;
 
-  const prevSmtp =
-    isPlainObject(existing) && isPlainObject((existing as Record<string, unknown>).smtp)
-      ? ((existing as Record<string, unknown>).smtp as Record<string, unknown>)
-      : null;
+  const prevSmtp = asPlainObject(asPlainObject(existing)?.smtp);
   return {
     ...next,
     smtp: {
@@ -169,6 +173,7 @@ function mergeAppEmailPassword(
   } as Prisma.InputJsonValue;
 }
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
+function asPlainObject(v: unknown): Record<string, unknown> | null {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return null;
+  return v as Record<string, unknown>;
 }
