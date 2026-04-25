@@ -100,6 +100,11 @@ export const ENDPOINTS = {
     WORKSPACES: 'workspaces',
     WORKSPACE_BY_ID: 'workspaces/:id',
     AUDIT: 'audit',
+    MAIL_LOGS: 'mail-logs',
+    MAIL_LOG_BY_ID: 'mail-logs/:id',
+    MAIL_LOG_STATS: 'mail-logs/stats',
+    MAIL_LOG_CONFIG: 'mail-logs/config-status',
+    MAIL_TEST: 'mail-logs/test',
   },
   FEATURE_FLAGS: {
     BASE: 'feature-flags',

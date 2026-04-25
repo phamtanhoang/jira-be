@@ -65,3 +65,14 @@ enum ActivityAction {
   ATTACHED
   LOGGED_WORK
 }
+
+enum MailType {
+  VERIFICATION
+  PASSWORD_RESET
+  OTHER
+}
+
+enum MailStatus {
+  SENT
+  FAILED
+}

@@ -12,6 +12,12 @@ export const ENV = {
   CORS_ORIGIN: process.env.CORS_ORIGIN!,
   NODE_ENV: process.env.NODE_ENV!,
   RESEND_API_KEY: process.env.RESEND_API_KEY!,
+  // Fallback FROM address when admin hasn't filled the `app.email` setting in
+  // DB. Resend rejects sends with an empty `from`, so this prevents the whole
+  // signup / forgot-password flow from breaking just because settings were
+  // never configured. Format: bare email or "Display Name <addr@domain>".
+  MAIL_FROM: process.env.MAIL_FROM ?? '',
+  MAIL_FROM_NAME: process.env.MAIL_FROM_NAME ?? '',
   SUPABASE_URL: process.env.SUPABASE_URL!,
   SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY!,
   SUPABASE_STORAGE_BUCKET: process.env.SUPABASE_STORAGE_BUCKET!,

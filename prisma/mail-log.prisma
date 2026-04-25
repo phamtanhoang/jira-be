@@ -1,0 +1,20 @@
+model MailLog {
+  id           String     @id @default(uuid())
+  type         MailType
+  status       MailStatus
+  recipient    String
+  subject      String
+  fromEmail    String?
+  // The Resend message id when the send succeeded — useful for cross-checking
+  // delivery in their dashboard.
+  providerId   String?
+  // Free-form failure detail. Captured from caught error.message, max 2000 to
+  // keep the column index-friendly.
+  errorMessage String?
+  // Sentry event id when we captured the failure — admin can pivot to Sentry.
+  sentryId     String?
+  createdAt    DateTime   @default(now())
+
+  @@index([status, createdAt])
+  @@index([recipient, createdAt])
+}
