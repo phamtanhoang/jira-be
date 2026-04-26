@@ -1,11 +1,21 @@
-import { Controller, Delete, Get, Param, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
 import { ENDPOINTS } from '@/core/constants';
 import { CurrentUser, Roles } from '@/core/decorators';
 import type { AuthUser } from '@/core/types';
 import { AdminService } from './admin.service';
 import {
+  BulkInviteDto,
   QueryAdminWorkspacesDto,
   QueryAnalyticsDto,
   QueryMetricsDto,
@@ -23,6 +33,15 @@ export class AdminController {
   @ApiOperation({ summary: 'System-wide counts for the admin overview' })
   getStats() {
     return this.adminService.getStats();
+  }
+
+  @Get(E.HEALTH)
+  @ApiOperation({
+    summary:
+      'Probe DB + supabase + mail + sentry wiring; returns process metrics',
+  })
+  getHealth() {
+    return this.adminService.getHealth();
   }
 
   @Get(E.ANALYTICS)
@@ -62,9 +81,24 @@ export class AdminController {
     return this.adminService.listAllWorkspaces(query);
   }
 
+  @Get(E.WORKSPACE_BY_ID)
+  @ApiOperation({
+    summary: 'Workspace detail with counts, storage, recent projects + members',
+  })
+  getWorkspace(@Param('id') id: string) {
+    return this.adminService.getWorkspaceById(id);
+  }
+
   @Delete(E.WORKSPACE_BY_ID)
   @ApiOperation({ summary: 'Admin delete any workspace (cascades)' })
   deleteWorkspace(@Param('id') id: string, @CurrentUser() actor: AuthUser) {
     return this.adminService.deleteWorkspace(id, actor.id);
+  }
+
+  @Post(E.USERS_BULK_INVITE)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @ApiOperation({ summary: 'Bulk-invite users by email (admin only)' })
+  bulkInvite(@Body() dto: BulkInviteDto, @CurrentUser() actor: AuthUser) {
+    return this.adminService.bulkInviteUsers(actor.id, dto.emails, dto.message);
   }
 }

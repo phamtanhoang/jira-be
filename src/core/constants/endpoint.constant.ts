@@ -113,6 +113,7 @@ export const ENDPOINTS = {
   ADMIN: {
     BASE: 'admin',
     STATS: 'stats',
+    HEALTH: 'health',
     ANALYTICS: 'analytics',
     METRICS: 'metrics',
     USER_ACTIVITY: 'user-activity',
@@ -125,6 +126,9 @@ export const ENDPOINTS = {
     MAIL_LOG_STATS: 'mail-logs/stats',
     MAIL_LOG_CONFIG: 'mail-logs/config-status',
     MAIL_TEST: 'mail-logs/test',
+    USERS_BULK_INVITE: 'users/bulk-invite',
+    THROTTLE_OVERRIDES: 'throttle-overrides',
+    THROTTLE_OVERRIDE_BY_ID: 'throttle-overrides/:id',
   },
   FEATURE_FLAGS: {
     BASE: 'feature-flags',

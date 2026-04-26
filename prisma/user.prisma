@@ -35,6 +35,7 @@ model User {
   issueShareTokens IssueShareToken[] @relation("IssueShareTokenCreator")
   workspaceInvites WorkspaceInviteLink[] @relation("WorkspaceInviteCreator")
   notificationPreferences NotificationPreference[] @relation("NotificationPreferenceUser")
+  throttleOverrides       ThrottleOverride[]       @relation("ThrottleOverrideAuthor")
 
   createdFeatureFlags FeatureFlag[]   @relation("FeatureFlagCreator")
   adminAuditLogs      AdminAuditLog[] @relation("AdminAudit")

@@ -1,10 +1,14 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from '@/core/database/prisma.module';
 import { AllExceptionsFilter } from '@/core/filters/http-exception.filter';
-import { JwtAuthGuard, RolesGuard } from '@/core/guards';
+import {
+  JwtAuthGuard,
+  OverridableThrottlerGuard,
+  RolesGuard,
+} from '@/core/guards';
 import {
   RequestLoggerInterceptor,
   TimezoneInterceptor,
@@ -28,6 +32,7 @@ import { PublicModule } from '@/modules/public/public.module';
 import { SavedFiltersModule } from '@/modules/saved-filters/saved-filters.module';
 import { SettingsModule } from '@/modules/settings/settings.module';
 import { SprintsModule } from '@/modules/sprints/sprints.module';
+import { ThrottleOverridesModule } from '@/modules/throttle-overrides/throttle-overrides.module';
 import { UsersModule } from '@/modules/users/users.module';
 import { WorklogsModule } from '@/modules/worklogs/worklogs.module';
 import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
@@ -62,13 +67,14 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     IssueTemplatesModule,
     InviteLinksModule,
     PublicModule,
+    ThrottleOverridesModule,
     DebugModule,
   ],
   providers: [
     SentryService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: OverridableThrottlerGuard },
     { provide: APP_INTERCEPTOR, useClass: RequestLoggerInterceptor },
     { provide: APP_INTERCEPTOR, useClass: TimezoneInterceptor },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

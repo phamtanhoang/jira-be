@@ -4,3 +4,4 @@ export * from './query-metrics.dto';
 export * from './query-users.dto';
 export * from './update-role.dto';
 export * from './update-status.dto';
+export * from './bulk-invite.dto';

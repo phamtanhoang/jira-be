@@ -8,6 +8,7 @@ export type AuditAction =
   | 'USER_DELETE'
   | 'USER_DEACTIVATE'
   | 'USER_ACTIVATE'
+  | 'USERS_BULK_INVITE'
   | 'SESSION_REVOKE'
   | 'SESSIONS_REVOKE_ALL'
   | 'WORKSPACE_DELETE'
@@ -17,7 +18,10 @@ export type AuditAction =
   | 'SETTING_UPDATE'
   | 'FLAG_CREATE'
   | 'FLAG_UPDATE'
-  | 'FLAG_DELETE';
+  | 'FLAG_DELETE'
+  | 'THROTTLE_OVERRIDE_CREATE'
+  | 'THROTTLE_OVERRIDE_UPDATE'
+  | 'THROTTLE_OVERRIDE_DELETE';
 
 export type QueryAuditLog = {
   action?: AuditAction;

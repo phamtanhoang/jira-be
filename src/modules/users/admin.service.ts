@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { LogLevel, Prisma } from '@prisma/client';
-import { MSG, USER_SELECT_BASIC } from '@/core/constants';
+import { ENV, MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { MailService } from '@/core/mail/mail.service';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { QueryAdminWorkspacesDto } from './dto';
 
@@ -37,6 +38,7 @@ export class AdminService {
   constructor(
     private prisma: PrismaService,
     private audit: AdminAuditService,
+    private mail: MailService,
   ) {}
 
   async getStats() {
@@ -487,4 +489,241 @@ export class AdminService {
     });
     return { message: MSG.SUCCESS.WORKSPACE_DELETED };
   }
+
+  // System health probe — surfaces wiring status of external dependencies +
+  // process metrics so admins can spot a degraded service before users do.
+  // Each probe wraps in try/catch so one failure doesn't fail the whole call.
+  async getHealth() {
+    const startedAt = Date.now();
+
+    const dbProbe = async (): Promise<{
+      ok: boolean;
+      latencyMs: number;
+      error?: string;
+    }> => {
+      const t = Date.now();
+      try {
+        await this.prisma.$queryRaw`SELECT 1`;
+        return { ok: true, latencyMs: Date.now() - t };
+      } catch (err) {
+        return { ok: false, latencyMs: Date.now() - t, error: String(err) };
+      }
+    };
+
+    const supabaseProbe = async (): Promise<{
+      configured: boolean;
+      ok: boolean;
+      error?: string;
+    }> => {
+      if (!ENV.SUPABASE_URL || !ENV.SUPABASE_SERVICE_KEY) {
+        return { configured: false, ok: false };
+      }
+      try {
+        const res = await fetch(`${ENV.SUPABASE_URL}/auth/v1/health`, {
+          headers: { apikey: ENV.SUPABASE_SERVICE_KEY },
+          signal: AbortSignal.timeout(3000),
+        });
+        return { configured: true, ok: res.ok };
+      } catch (err) {
+        return { configured: true, ok: false, error: String(err) };
+      }
+    };
+
+    const [db, supabase] = await Promise.all([dbProbe(), supabaseProbe()]);
+
+    const mem = process.memoryUsage();
+    const memoryMB = Math.round((mem.rss / 1024 / 1024) * 10) / 10;
+
+    return {
+      checkedAt: new Date().toISOString(),
+      checkDurationMs: Date.now() - startedAt,
+      db,
+      // Resend has no cheap public health endpoint — report config-only state.
+      mail: {
+        configured: !!ENV.RESEND_API_KEY,
+        from: ENV.MAIL_FROM || null,
+      },
+      supabase,
+      sentry: {
+        configured: !!ENV.SENTRY_DSN,
+        active: !!ENV.SENTRY_DSN && ENV.IS_PRODUCTION,
+      },
+      runtime: {
+        nodeVersion: process.version,
+        uptimeSec: Math.round(process.uptime()),
+        memoryMB,
+        env: ENV.NODE_ENV,
+      },
+    };
+  }
+
+  // Detail view of a single workspace for /admin/workspaces/:id. Bundles
+  // counts + recent activity so the FE doesn't need to chain 5 calls.
+  async getWorkspaceById(id: string) {
+    const ws = await this.prisma.workspace.findUnique({
+      where: { id },
+      include: {
+        owner: USER_SELECT_BASIC,
+        _count: { select: { members: true, projects: true } },
+      },
+    });
+    if (!ws) throw new NotFoundException(MSG.ERROR.WORKSPACE_NOT_FOUND);
+
+    const projectIdRows = await this.prisma.project.findMany({
+      where: { workspaceId: id },
+      select: { id: true },
+    });
+    const projectIds = projectIdRows.map((p) => p.id);
+
+    const [
+      issuesTotal,
+      issuesOpen,
+      attachmentsAgg,
+      recentProjects,
+      recentMembers,
+    ] = await Promise.all([
+      this.prisma.issue.count({ where: { projectId: { in: projectIds } } }),
+      this.prisma.issue.count({
+        where: {
+          projectId: { in: projectIds },
+          boardColumn: { category: { not: 'DONE' } },
+        },
+      }),
+      this.prisma.attachment.aggregate({
+        where: { issue: { projectId: { in: projectIds } } },
+        _sum: { fileSize: true },
+        _count: { _all: true },
+      }),
+      this.prisma.project.findMany({
+        where: { workspaceId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          name: true,
+          key: true,
+          createdAt: true,
+          _count: { select: { issues: true } },
+        },
+      }),
+      this.prisma.workspaceMember.findMany({
+        where: { workspaceId: id },
+        orderBy: { joinedAt: 'desc' },
+        take: 10,
+        include: { user: USER_SELECT_BASIC },
+      }),
+    ]);
+
+    return {
+      id: ws.id,
+      name: ws.name,
+      slug: ws.slug,
+      description: ws.description,
+      createdAt: ws.createdAt,
+      owner: ws.owner,
+      counts: {
+        members: ws._count.members,
+        projects: ws._count.projects,
+        issues: issuesTotal,
+        issuesOpen,
+        attachments: attachmentsAgg._count._all,
+      },
+      storage: {
+        bytes: Number(attachmentsAgg._sum.fileSize ?? 0),
+      },
+      recentProjects,
+      recentMembers,
+    };
+  }
+
+  // Bulk-invite by email — does NOT pre-create User rows. Each new email
+  // gets an invitation email linking to /sign-up?email=...; existing users
+  // are reported back as `skipped`. The mail send is fire-and-forget so a
+  // single SMTP failure doesn't block the whole batch.
+  async bulkInviteUsers(actorId: string, emails: string[], message?: string) {
+    const cleaned = Array.from(
+      new Set(
+        emails
+          .map((e) => (typeof e === 'string' ? e.trim().toLowerCase() : ''))
+          .filter((e) => e.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)),
+      ),
+    );
+    const invalid = emails.length - cleaned.length;
+
+    if (cleaned.length === 0) {
+      return {
+        message: MSG.SUCCESS.USERS_BULK_INVITED,
+        invited: 0,
+        skipped: 0,
+        invalid,
+      };
+    }
+
+    const existing = await this.prisma.user.findMany({
+      where: { email: { in: cleaned } },
+      select: { email: true },
+    });
+    const existingSet = new Set(existing.map((u) => u.email.toLowerCase()));
+    const fresh = cleaned.filter((e) => !existingSet.has(e));
+
+    this.audit.log(actorId, 'USERS_BULK_INVITE', {
+      target: 'bulk-invite',
+      targetType: 'User',
+      payload: {
+        invited: fresh.length,
+        skipped: existingSet.size,
+        invalid,
+        ...(message ? { message } : {}),
+      },
+    });
+
+    // Fan out the actual mail sends — fire-and-forget so a single SMTP
+    // failure doesn't cascade. Each call already persists a MailLog row, so
+    // operators can audit failures from /admin/mail-logs.
+    const signUpBase = ENV.FRONTEND_URL || ENV.CORS_ORIGIN.split(',')[0] || '';
+    for (const email of fresh) {
+      const link = `${signUpBase}/sign-up?email=${encodeURIComponent(email)}`;
+      const html = renderInvitationHtml(link, message);
+      void this.mail
+        .send({
+          to: email,
+          subject: 'You have been invited',
+          html,
+          type: 'OTHER',
+        })
+        .catch(() => null);
+    }
+
+    return {
+      message: MSG.SUCCESS.USERS_BULK_INVITED,
+      invited: fresh.length,
+      skipped: existingSet.size,
+      invalid,
+    };
+  }
+}
+
+function renderInvitationHtml(
+  signUpUrl: string,
+  customMessage?: string,
+): string {
+  const safeMessage = customMessage
+    ? `<p>${escapeHtml(customMessage)}</p>`
+    : '';
+  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;max-width:560px;margin:auto;padding:24px;color:#1f2937">
+    <h2 style="margin:0 0 16px">You have been invited</h2>
+    <p>An administrator has invited you to join. Click the link below to create your account:</p>
+    ${safeMessage}
+    <p style="margin:24px 0"><a href="${signUpUrl}" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block">Sign up</a></p>
+    <p style="color:#6b7280;font-size:12px">If the button doesn't work, paste this link in your browser:<br/>${signUpUrl}</p>
+  </body></html>`;
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

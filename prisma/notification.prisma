@@ -7,6 +7,11 @@ model Notification {
   body      String?
   link      String?
   readAt    DateTime?
+  // Set by the daily DigestService cron once the row has been included in
+  // an email digest (or skipped due to per-type preference). Kept separate
+  // from readAt so a user "reading" the digest doesn't mark in-app rows
+  // as read.
+  digestSentAt DateTime?
   createdAt DateTime  @default(now())
 
   // Bell badge query is `where userId = X AND readAt IS NULL` — the
@@ -14,4 +19,7 @@ model Notification {
   // (userId, createdAt) index serves the paginated full list view.
   @@index([userId, readAt, createdAt])
   @@index([userId, createdAt])
+  // Digest cron filters by digestSentAt IS NULL across all users — index
+  // it so we don't full-scan the table at 8am.
+  @@index([digestSentAt, readAt])
 }

@@ -1,0 +1,26 @@
+// Per-target overrides for the global throttler.
+//
+// `target` carries the tracker key the ThrottlerGuard would otherwise hash —
+// either an authenticated `userId` or, for anonymous traffic, an `ip` prefix.
+// `bypass = true` short-circuits the guard for that target (use sparingly,
+// e.g. trusted internal probes). `multiplier` scales the per-route limit
+// when bypass is false (e.g. 10x for a customer doing a one-off bulk import).
+//
+// Rows expire on `expiresAt` — guard skips rows past their expiry. Cleanup
+// is incidental: the next admin who queries the list sees stale rows and
+// can prune them.
+
+model ThrottleOverride {
+  id          String    @id @default(uuid())
+  target      String    @unique // e.g. "user:UUID" or "ip:1.2.3.4"
+  bypass      Boolean   @default(false)
+  multiplier  Float     @default(1)
+  reason      String?
+  expiresAt   DateTime?
+  createdById String?
+  createdBy   User?     @relation("ThrottleOverrideAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([expiresAt])
+}
