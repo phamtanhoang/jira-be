@@ -28,6 +28,7 @@ import {
 } from '@/core/utils';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { ProjectsService } from '@/modules/projects/projects.service';
+import { WebhooksService } from '@/modules/webhooks/webhooks.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import { CreateIssueDto, UpdateIssueDto, MoveIssueDto } from './dto';
 
@@ -97,6 +98,7 @@ export class IssuesService {
     private workspacesService: WorkspacesService,
     private projectsService: ProjectsService,
     private notifications: NotificationsService,
+    private webhooks: WebhooksService,
   ) {}
 
   async create(userId: string, dto: CreateIssueDto) {
@@ -171,6 +173,17 @@ export class IssuesService {
       // notifications without an explicit "Watch" click.
       if (dto.assigneeId) this.autoWatch(issue.id, dto.assigneeId);
       this.autoWatch(issue.id, userId);
+
+      this.webhooks.dispatch(project.workspaceId, 'issue.created', {
+        issue: {
+          id: issue.id,
+          key: issue.key,
+          summary: issue.summary,
+          type: issue.type,
+        },
+        actor: { id: userId },
+        link: `/issues/${issue.key}`,
+      });
 
       return decorateUserMeta(issue);
     });
@@ -495,6 +508,8 @@ export class IssuesService {
       });
     }
 
+    void this.fireIssueWebhook('issue.updated', updated, userId);
+
     return decorateUserMeta(updated);
   }
 
@@ -555,12 +570,49 @@ export class IssuesService {
       });
     }
 
+    void this.fireIssueWebhook('issue.moved', updated, userId);
+
     return decorateUserMeta(updated);
   }
 
   async delete(issueId: string, userId: string) {
-    await this.findById(issueId, userId);
-    return this.prisma.issue.delete({ where: { id: issueId } });
+    const issue = await this.findById(issueId, userId);
+    const result = await this.prisma.issue.delete({ where: { id: issueId } });
+    void this.fireIssueWebhook('issue.deleted', issue, userId);
+    return result;
+  }
+
+  // Look up the workspaceId for the issue's project then forward to the
+  // webhook dispatcher. Pulled out so issue.create/update/move/delete don't
+  // each duplicate the lookup.
+  private async fireIssueWebhook(
+    event: string,
+    issue: {
+      id: string;
+      key: string;
+      summary: string;
+      type: string;
+      projectId: string;
+    },
+    actorId: string,
+  ): Promise<void> {
+    const project = await this.prisma.project
+      .findUnique({
+        where: { id: issue.projectId },
+        select: { workspaceId: true },
+      })
+      .catch(() => null);
+    if (!project) return;
+    this.webhooks.dispatch(project.workspaceId, event, {
+      issue: {
+        id: issue.id,
+        key: issue.key,
+        summary: issue.summary,
+        type: issue.type,
+      },
+      actor: { id: actorId },
+      link: `/issues/${issue.key}`,
+    });
   }
 
   // ─── Star / Favorite ──────────────────────────────────

@@ -7,6 +7,7 @@ import {
 import { WorkspaceRole } from '@prisma/client';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { SettingsService } from '@/modules/settings/settings.service';
 import {
   AddWorkspaceMemberDto,
   CreateWorkspaceDto,
@@ -16,7 +17,10 @@ import {
 
 @Injectable()
 export class WorkspacesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private settings: SettingsService,
+  ) {}
 
   async create(userId: string, dto: CreateWorkspaceDto) {
     const slug = this.generateSlug(dto.name);
@@ -137,6 +141,17 @@ export class WorkspacesService {
     });
     if (existing)
       throw new BadRequestException(MSG.ERROR.ALREADY_WORKSPACE_MEMBER);
+
+    // Tenant quota — members per workspace.
+    const quotas = await this.settings.getQuotas();
+    if (quotas.maxMembersPerWorkspace > 0) {
+      const count = await this.prisma.workspaceMember.count({
+        where: { workspaceId },
+      });
+      if (count >= quotas.maxMembersPerWorkspace) {
+        throw new ForbiddenException(MSG.ERROR.QUOTA_MEMBERS_REACHED);
+      }
+    }
 
     return this.prisma.workspaceMember.create({
       data: {

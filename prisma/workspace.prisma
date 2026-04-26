@@ -12,6 +12,7 @@ model Workspace {
   members  WorkspaceMember[]
   projects Project[]
   inviteLinks WorkspaceInviteLink[]
+  webhooks Webhook[] @relation("WebhookWorkspace")
 
   @@index([ownerId])
 }

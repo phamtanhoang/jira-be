@@ -63,6 +63,31 @@ export class SettingsService {
   }
 
   /**
+   * Tenant-level quotas. `0` = unlimited (skip the check). Defaults are
+   * unlimited so a fresh install never blocks any operation. Persisted shape:
+   * `{ maxProjectsPerWorkspace, maxMembersPerWorkspace, maxStorageGB }`.
+   */
+  async getQuotas(): Promise<{
+    maxProjectsPerWorkspace: number;
+    maxMembersPerWorkspace: number;
+    maxStorageGB: number;
+  }> {
+    const setting = await this.prisma.setting.findUnique({
+      where: { key: SETTING_KEYS.APP_QUOTAS },
+    });
+    const value = (setting?.value ?? {}) as {
+      maxProjectsPerWorkspace?: number;
+      maxMembersPerWorkspace?: number;
+      maxStorageGB?: number;
+    };
+    return {
+      maxProjectsPerWorkspace: value.maxProjectsPerWorkspace ?? 0,
+      maxMembersPerWorkspace: value.maxMembersPerWorkspace ?? 0,
+      maxStorageGB: value.maxStorageGB ?? 0,
+    };
+  }
+
+  /**
    * Resolved auth-provider toggles. Defaults to all enabled when the row is
    * missing so a fresh install behaves like before this feature shipped.
    * Persisted shape: `{ password: bool, google: bool, github: bool }`.

@@ -10,6 +10,7 @@ import { PrismaService } from '@/core/database/prisma.service';
 import { assertProjectAccess } from '@/core/utils';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { BoardsService } from '@/modules/boards/boards.service';
+import { SettingsService } from '@/modules/settings/settings.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import {
   AddProjectMemberDto,
@@ -26,10 +27,22 @@ export class ProjectsService {
     private workspacesService: WorkspacesService,
     private boardsService: BoardsService,
     private audit: AdminAuditService,
+    private settings: SettingsService,
   ) {}
 
   async create(userId: string, dto: CreateProjectDto) {
     await this.workspacesService.assertMember(dto.workspaceId, userId);
+
+    // Tenant quota — projects per workspace.
+    const quotas = await this.settings.getQuotas();
+    if (quotas.maxProjectsPerWorkspace > 0) {
+      const count = await this.prisma.project.count({
+        where: { workspaceId: dto.workspaceId },
+      });
+      if (count >= quotas.maxProjectsPerWorkspace) {
+        throw new ForbiddenException(MSG.ERROR.QUOTA_PROJECTS_REACHED);
+      }
+    }
 
     const existing = await this.prisma.project.findUnique({
       where: {

@@ -2,6 +2,8 @@ export const ENDPOINTS = {
   AUTH: {
     BASE: 'auth',
     TOKENS: 'tokens',
+    DATA_EXPORT: 'data-export',
+    DELETION_REQUEST: 'deletion-request',
     REGISTER: 'register',
     VERIFY_EMAIL: 'verify-email',
     LOGIN: 'login',
@@ -37,6 +39,7 @@ export const ENDPOINTS = {
     INVITE_LINK_BY_ID: ':id/invite-links/:linkId',
     JOIN: 'join/:token',
     INVITE_PREVIEW: 'join/:token/preview',
+    WEBHOOKS: 'webhooks',
   },
   PROJECTS: {
     BASE: 'projects',
@@ -131,6 +134,8 @@ export const ENDPOINTS = {
     USERS_BULK_INVITE: 'users/bulk-invite',
     THROTTLE_OVERRIDES: 'throttle-overrides',
     THROTTLE_OVERRIDE_BY_ID: 'throttle-overrides/:id',
+    WEBHOOK_DELIVERIES: 'webhook-deliveries',
+    WEBHOOK_DELIVERY_RETRY: 'webhook-deliveries/:id/retry',
   },
   FEATURE_FLAGS: {
     BASE: 'feature-flags',

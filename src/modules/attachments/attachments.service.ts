@@ -10,12 +10,14 @@ import {
   createSignedUrl,
 } from '@/core/utils';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
+import { SettingsService } from '@/modules/settings/settings.service';
 
 @Injectable()
 export class AttachmentsService {
   constructor(
     private prisma: PrismaService,
     private audit: AdminAuditService,
+    private settings: SettingsService,
   ) {}
 
   async uploadMany(
@@ -37,6 +39,25 @@ export class AttachmentsService {
       issue.project.id,
       userId,
     );
+
+    // Tenant quota — total attachment storage per workspace. Computed via
+    // raw SQL aggregate so we don't pull all rows. Skip when quota = 0.
+    const quotas = await this.settings.getQuotas();
+    if (quotas.maxStorageGB > 0) {
+      const incomingBytes = files.reduce((sum, f) => sum + f.size, 0);
+      const result = await this.prisma.$queryRaw<{ bytes: bigint }[]>`
+        SELECT COALESCE(SUM(a."fileSize"), 0)::bigint AS "bytes"
+        FROM "Attachment" a
+        JOIN "Issue" i ON i."id" = a."issueId"
+        JOIN "Project" p ON p."id" = i."projectId"
+        WHERE p."workspaceId" = ${issue.project.workspaceId}
+      `;
+      const used = Number(result[0]?.bytes ?? 0);
+      const limit = quotas.maxStorageGB * 1024 * 1024 * 1024;
+      if (used + incomingBytes > limit) {
+        throw new ForbiddenException(MSG.ERROR.QUOTA_STORAGE_REACHED);
+      }
+    }
 
     const attachments: Awaited<
       ReturnType<typeof this.prisma.attachment.create>

@@ -12,6 +12,7 @@ import {
   sanitizeRichHtml,
 } from '@/core/utils';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
+import { WebhooksService } from '@/modules/webhooks/webhooks.service';
 import { CreateCommentDto, UpdateCommentDto } from './dto';
 
 @Injectable()
@@ -19,6 +20,7 @@ export class CommentsService {
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
+    private webhooks: WebhooksService,
   ) {}
 
   async create(issueId: string, userId: string, dto: CreateCommentDto) {
@@ -96,6 +98,16 @@ export class CommentsService {
       type: 'MENTION_COMMENT',
       title: `You were mentioned on ${issue.key}`,
       body: stripHtmlPreview(safeContent),
+      link: `/issues/${issue.key}`,
+    });
+
+    this.webhooks.dispatch(issue.project.workspaceId, 'comment.created', {
+      issue: { id: issue.id, key: issue.key },
+      comment: {
+        id: comment.id,
+        contentPreview: stripHtmlPreview(safeContent),
+      },
+      actor: { id: userId },
       link: `/issues/${issue.key}`,
     });
 

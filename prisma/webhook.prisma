@@ -1,0 +1,49 @@
+// Outbound webhooks — workspace-scoped, fire on issue/comment events.
+//
+// `secret` is used as the HMAC-SHA256 key the receiver verifies against the
+// `X-Webhook-Signature` header. Stored plaintext (admin needs to re-display
+// for setup); not marked sensitive in logging because it never leaves the
+// table — payloads are signed at dispatch, not echoed.
+//
+// `events` is a string[] of event types the webhook subscribes to. We don't
+// model an enum because the set evolves frequently (new triggers ship as
+// strings, no migration needed).
+
+model Webhook {
+  id          String             @id @default(uuid())
+  workspaceId String
+  workspace   Workspace          @relation("WebhookWorkspace", fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  url         String
+  secret      String
+  events      String[]           @default([])
+  enabled     Boolean            @default(true)
+  createdById String?
+  createdBy   User?              @relation("WebhookCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  deliveries  WebhookDelivery[]  @relation("WebhookDeliveryHook")
+
+  @@index([workspaceId, enabled])
+}
+
+model WebhookDelivery {
+  id         String    @id @default(uuid())
+  webhookId  String
+  webhook    Webhook   @relation("WebhookDeliveryHook", fields: [webhookId], references: [id], onDelete: Cascade)
+  eventType  String
+  payload    Json
+  // null = pending dispatch; non-null = HTTP status code returned by receiver
+  // (or 0 when the request failed before getting a response).
+  statusCode Int?
+  // PENDING | SUCCESS | FAILED — denormalised for fast filtering on the
+  // admin delivery log page without parsing statusCode.
+  status     String    @default("PENDING")
+  error      String?
+  attempts   Int       @default(0)
+  deliveredAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([webhookId, createdAt])
+  @@index([status, createdAt])
+}

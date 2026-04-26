@@ -21,6 +21,7 @@ import { BoardsModule } from '@/modules/boards/boards.module';
 import { CommentsModule } from '@/modules/comments/comments.module';
 import { DebugModule } from '@/modules/debug/debug.module';
 import { FeatureFlagsModule } from '@/modules/feature-flags/feature-flags.module';
+import { GdprModule } from '@/modules/gdpr/gdpr.module';
 import { InviteLinksModule } from '@/modules/invite-links/invite-links.module';
 import { IssueTemplatesModule } from '@/modules/issue-templates/issue-templates.module';
 import { IssuesModule } from '@/modules/issues/issues.module';
@@ -35,6 +36,7 @@ import { SettingsModule } from '@/modules/settings/settings.module';
 import { SprintsModule } from '@/modules/sprints/sprints.module';
 import { ThrottleOverridesModule } from '@/modules/throttle-overrides/throttle-overrides.module';
 import { UsersModule } from '@/modules/users/users.module';
+import { WebhooksModule } from '@/modules/webhooks/webhooks.module';
 import { WorklogsModule } from '@/modules/worklogs/worklogs.module';
 import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
 
@@ -62,6 +64,7 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     AttachmentsModule,
     UsersModule,
     FeatureFlagsModule,
+    GdprModule,
     AdminAuditModule,
     NotificationsModule,
     PatModule,
@@ -70,6 +73,7 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     InviteLinksModule,
     PublicModule,
     ThrottleOverridesModule,
+    WebhooksModule,
     DebugModule,
   ],
   providers: [

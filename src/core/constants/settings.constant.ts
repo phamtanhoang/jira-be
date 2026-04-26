@@ -5,4 +5,5 @@ export const SETTING_KEYS = {
   APP_ANNOUNCEMENT: 'app.announcement',
   APP_MAINTENANCE: 'app.maintenance',
   APP_AUTH_PROVIDERS: 'app.auth_providers',
+  APP_QUOTAS: 'app.quotas',
 } as const;

@@ -37,10 +37,17 @@ model User {
   notificationPreferences NotificationPreference[] @relation("NotificationPreferenceUser")
   throttleOverrides       ThrottleOverride[]       @relation("ThrottleOverrideAuthor")
   personalAccessTokens    PersonalAccessToken[]    @relation("PatOwner")
+  createdWebhooks         Webhook[]                @relation("WebhookCreator")
 
   createdFeatureFlags FeatureFlag[]   @relation("FeatureFlagCreator")
   adminAuditLogs      AdminAuditLog[] @relation("AdminAudit")
 
+  // GDPR — user-initiated soft deletion. The nightly cron hard-deletes
+  // accounts whose request is older than 30 days. Until that grace window
+  // closes, the user can cancel the request from the profile page.
+  deletionRequestedAt DateTime?
+
   // Admin analytics queries signups over a date range.
   @@index([createdAt])
+  @@index([deletionRequestedAt])
 }
