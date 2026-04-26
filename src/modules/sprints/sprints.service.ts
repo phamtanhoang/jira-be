@@ -165,6 +165,63 @@ export class SprintsService {
     return { totalPoints, days };
   }
 
+  /**
+   * Velocity report: per past sprint, compute committed (sum of all story
+   * points planned at completion time) vs completed (points whose issues
+   * landed in a DONE column). Returns sprints in chronological order plus
+   * a 3-sprint moving average that the FE shows as "predicted next".
+   */
+  async getVelocity(boardId: string, userId: string) {
+    await this.assertBoardAccess(boardId, userId);
+
+    const sprints = await this.prisma.sprint.findMany({
+      where: {
+        boardId,
+        status: { in: [SprintStatus.COMPLETED, SprintStatus.CLOSED] },
+      },
+      include: {
+        issues: {
+          select: {
+            storyPoints: true,
+            completedAt: true,
+            boardColumn: { select: { category: true } },
+          },
+        },
+      },
+      orderBy: { endDate: 'asc' },
+      take: 12, // hard cap so the chart stays readable on small boards
+    });
+
+    const data = sprints.map((s) => {
+      const committed = s.issues.reduce(
+        (sum, i) => sum + (i.storyPoints ?? 0),
+        0,
+      );
+      const completed = s.issues
+        .filter((i) => i.boardColumn?.category === StatusCategory.DONE)
+        .reduce((sum, i) => sum + (i.storyPoints ?? 0), 0);
+      return {
+        sprintId: s.id,
+        name: s.name,
+        endDate: s.endDate,
+        committed,
+        completed,
+      };
+    });
+
+    // 3-sprint trailing average of completed points → "predicted" capacity
+    // for the next sprint. Falls back to the latest single sprint when fewer
+    // than 3 historical sprints exist.
+    const recent = data.slice(-3);
+    const predicted = recent.length
+      ? Math.round(
+          recent.reduce((sum, d) => sum + d.completed, 0) / recent.length,
+        )
+      : 0;
+
+    return { data, predicted };
+  }
+
   // ─── Helpers ──────────────────────────────────────────
 
   private async assertBoardAccess(boardId: string, userId: string) {

@@ -67,6 +67,18 @@ export class SprintsController {
     return this.sprintsService.getBurndown(id, user.id);
   }
 
+  @Get(E.VELOCITY)
+  @ApiOperation({
+    summary:
+      'Per-sprint velocity (committed vs completed) for the last 12 closed sprints + 3-sprint predicted capacity',
+  })
+  getVelocity(
+    @Param('boardId') boardId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.sprintsService.getVelocity(boardId, user.id);
+  }
+
   @Delete(E.BY_ID)
   @ApiOperation({ summary: 'Delete sprint' })
   async delete(@Param('id') id: string, @CurrentUser() user: AuthUser) {

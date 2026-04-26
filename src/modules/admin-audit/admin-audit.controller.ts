@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Header, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { ENDPOINTS } from '@/core/constants';
@@ -18,5 +18,16 @@ export class AdminAuditController {
   @ApiOperation({ summary: 'List admin audit log entries' })
   findAll(@Query() query: QueryAuditDto) {
     return this.adminAuditService.findAll(query);
+  }
+
+  @Get(E.AUDIT_EXPORT)
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="audit-log.csv"')
+  @ApiOperation({
+    summary:
+      'Export the (filtered) audit log as CSV. Accepts the same query as the list endpoint.',
+  })
+  exportCsv(@Query() query: QueryAuditDto) {
+    return this.adminAuditService.exportCsv(query);
   }
 }

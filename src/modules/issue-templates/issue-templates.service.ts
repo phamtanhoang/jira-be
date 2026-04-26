@@ -6,6 +6,7 @@ import {
 import { Prisma, ProjectRole } from '@prisma/client';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { sanitizeRichHtml } from '@/core/utils';
 import { ProjectsService } from '@/modules/projects/projects.service';
 import { CreateIssueTemplateDto, UpdateIssueTemplateDto } from './dto';
 
@@ -36,7 +37,9 @@ export class IssueTemplatesService {
           projectId: dto.projectId,
           name: dto.name.trim(),
           type: dto.type ?? 'TASK',
-          descriptionHtml: dto.descriptionHtml,
+          descriptionHtml: dto.descriptionHtml
+            ? sanitizeRichHtml(dto.descriptionHtml)
+            : dto.descriptionHtml,
           defaultPriority: dto.defaultPriority,
           defaultLabels: dto.defaultLabels ?? [],
         },
@@ -63,7 +66,9 @@ export class IssueTemplatesService {
           ...(dto.name !== undefined && { name: dto.name.trim() }),
           ...(dto.type !== undefined && { type: dto.type }),
           ...(dto.descriptionHtml !== undefined && {
-            descriptionHtml: dto.descriptionHtml,
+            descriptionHtml: dto.descriptionHtml
+              ? sanitizeRichHtml(dto.descriptionHtml)
+              : dto.descriptionHtml,
           }),
           ...(dto.defaultPriority !== undefined && {
             defaultPriority: dto.defaultPriority,

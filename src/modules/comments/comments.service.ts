@@ -6,7 +6,11 @@ import {
 import { ActivityAction } from '@prisma/client';
 import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import { assertProjectAccess, extractMentions } from '@/core/utils';
+import {
+  assertProjectAccess,
+  extractMentions,
+  sanitizeRichHtml,
+} from '@/core/utils';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { CreateCommentDto, UpdateCommentDto } from './dto';
 
@@ -31,11 +35,13 @@ export class CommentsService {
       userId,
     );
 
+    const safeContent = sanitizeRichHtml(dto.content);
+
     const comment = await this.prisma.comment.create({
       data: {
         issueId,
         authorId: userId,
-        content: dto.content,
+        content: safeContent,
         parentId: dto.parentId,
       },
       include: {
@@ -67,7 +73,7 @@ export class CommentsService {
     this.notifications.createMany(baseRecipients, {
       type: 'COMMENT_CREATED',
       title: `New comment on ${issue.key}`,
-      body: stripHtmlPreview(dto.content),
+      body: stripHtmlPreview(safeContent),
       link: `/issues/${issue.key}`,
     });
 
@@ -83,13 +89,13 @@ export class CommentsService {
 
     // Mentions get a separate, stronger notification — but only for people
     // NOT already covered by the base fan-out (avoid duplicate pings).
-    const mentionedIds = extractMentions(dto.content).filter(
+    const mentionedIds = extractMentions(safeContent).filter(
       (id) => id !== userId && !baseSet.has(id),
     );
     this.notifications.createMany(mentionedIds, {
       type: 'MENTION_COMMENT',
       title: `You were mentioned on ${issue.key}`,
-      body: stripHtmlPreview(dto.content),
+      body: stripHtmlPreview(safeContent),
       link: `/issues/${issue.key}`,
     });
 
@@ -132,7 +138,7 @@ export class CommentsService {
 
     return this.prisma.comment.update({
       where: { id: commentId },
-      data: { content: dto.content },
+      data: { content: sanitizeRichHtml(dto.content) },
       include: { author: USER_SELECT_BASIC },
     });
   }

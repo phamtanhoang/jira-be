@@ -5,5 +5,6 @@ export * from './cookie.util';
 export * from './csv.util';
 export * from './parse-mentions.util';
 export * from './sanitize.util';
+export * from './sanitize-html.util';
 export * from './storage.util';
 export * from './timezone.util';

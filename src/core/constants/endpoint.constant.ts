@@ -56,6 +56,7 @@ export const ENDPOINTS = {
     START: ':id/start',
     COMPLETE: ':id/complete',
     BURNDOWN: ':id/burndown',
+    VELOCITY: 'velocity/:boardId',
   },
   ISSUES: {
     BASE: 'issues',
@@ -118,6 +119,7 @@ export const ENDPOINTS = {
     WORKSPACES: 'workspaces',
     WORKSPACE_BY_ID: 'workspaces/:id',
     AUDIT: 'audit',
+    AUDIT_EXPORT: 'audit/export.csv',
     MAIL_LOGS: 'mail-logs',
     MAIL_LOG_BY_ID: 'mail-logs/:id',
     MAIL_LOG_STATS: 'mail-logs/stats',

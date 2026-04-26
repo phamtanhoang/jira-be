@@ -20,7 +20,12 @@ import {
   BOARD_COLUMN_SELECT,
 } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import { csvEscape, generateShareToken, newMentions } from '@/core/utils';
+import {
+  csvEscape,
+  generateShareToken,
+  newMentions,
+  sanitizeRichHtml,
+} from '@/core/utils';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { ProjectsService } from '@/modules/projects/projects.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
@@ -127,7 +132,9 @@ export class IssuesService {
           key,
           projectId: project.id,
           summary: dto.summary,
-          description: dto.description,
+          description: dto.description
+            ? sanitizeRichHtml(dto.description)
+            : dto.description,
           type: dto.type,
           priority: dto.priority,
           reporterId: userId,
@@ -419,6 +426,8 @@ export class IssuesService {
       const oldVal = (issue as Record<string, unknown>)[field];
       if (field === 'dueDate' || field === 'startDate') {
         data[field] = value ? new Date(value as string) : null;
+      } else if (field === 'description') {
+        data[field] = value ? sanitizeRichHtml(value as string) : value;
       } else {
         data[field] = value;
       }
