@@ -4,7 +4,7 @@
  * Test files legitimately reference unbound prototype methods just to read
  * metadata off them — no invocation happens.
  */
-/* eslint-disable @typescript-eslint/unbound-method */
+
 import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
 import { ROLES_KEY, Roles } from '@/core/decorators/roles.decorator';

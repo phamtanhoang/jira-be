@@ -29,7 +29,10 @@ export class SavedFiltersService {
         OR: [{ ownerId: userId }, { shared: true }],
       },
       include: { owner: USER_SELECT_BASIC },
-      orderBy: [{ ownerId: userId === '__placeholder__' ? 'asc' : 'desc' }, { name: 'asc' }],
+      orderBy: [
+        { ownerId: userId === '__placeholder__' ? 'asc' : 'desc' },
+        { name: 'asc' },
+      ],
     });
   }
 

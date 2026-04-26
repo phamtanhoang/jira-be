@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ENDPOINTS, MSG } from '@/core/constants';
@@ -25,7 +18,9 @@ export class NotificationsController {
   // by userId is the strong gate; IP throttling here would just punish
   // multi-tab users.
   @SkipThrottle()
-  @ApiOperation({ summary: 'List notifications (page-based, optional unread filter)' })
+  @ApiOperation({
+    summary: 'List notifications (page-based, optional unread filter)',
+  })
   findAll(
     @CurrentUser() user: AuthUser,
     @Query('unread') unread?: string,
@@ -48,10 +43,7 @@ export class NotificationsController {
 
   @Post(E.READ)
   @ApiOperation({ summary: 'Mark a single notification as read' })
-  async markRead(
-    @Param('id') id: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  async markRead(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     const notification = await this.notificationsService.markRead(id, user.id);
     return { message: MSG.SUCCESS.NOTIFICATION_READ, notification };
   }

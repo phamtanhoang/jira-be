@@ -42,6 +42,19 @@ export default tseslint.config(
       },
     },
   },
+  // Test files commonly inspect mock.calls / cast prisma mocks to `as never`,
+  // which trips the strict type-aware rules even when the test logic is fine.
+  // Loosen them for `test/**` only — production code keeps the full suite.
+  {
+    files: ['test/**/*.ts', '**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/unbound-method': 'off',
+    },
+  },
   {
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',

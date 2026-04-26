@@ -330,11 +330,7 @@ export class ProjectsService {
   // Public so other modules (saved-filters, issue-templates, ...) can gate
   // their write operations on the same role hierarchy without re-implementing
   // the lookup.
-  async assertRole(
-    projectId: string,
-    userId: string,
-    roles: ProjectRole[],
-  ) {
+  async assertRole(projectId: string, userId: string, roles: ProjectRole[]) {
     const member = await this.prisma.projectMember.findUnique({
       where: { projectId_userId: { projectId, userId } },
     });

@@ -55,21 +55,15 @@ const ISSUE_LINK_PEER_SELECT = {
 // state. Empty array → not starred; one row → starred. We keep the static
 // ISSUE_INCLUDE for hot paths and merge the per-user clause when we have a
 // userId in scope.
-function withUserMeta<T extends Record<string, unknown>>(include: T, userId: string) {
+function withUserMeta<T extends Record<string, unknown>>(
+  include: T,
+  userId: string,
+) {
   return {
     ...include,
     stars: { where: { userId }, select: { userId: true } },
     watchers: { where: { userId }, select: { userId: true } },
   };
-}
-
-// CSV cell escape: double-quote the field when it contains comma, quote, CR,
-// or LF; embedded quotes get doubled per RFC 4180. Numbers stringify cleanly.
-function csvEscape(value: unknown): string {
-  if (value == null) return '';
-  const s = String(value);
-  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
 }
 
 type IssueWithUserMeta = {

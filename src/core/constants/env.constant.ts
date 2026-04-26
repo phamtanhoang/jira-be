@@ -26,9 +26,7 @@ export const ENV = {
     process.env.JWT_REFRESH_TOKEN_EXPIRATION ?? '604800',
   ),
   // 30 days, in seconds — matches `prisma migrate dev`'s default for OTP.
-  LOG_RETENTION_EXPIRY: parseInt(
-    process.env.LOG_RETENTION_EXPIRY ?? '2592000',
-  ),
+  LOG_RETENTION_EXPIRY: parseInt(process.env.LOG_RETENTION_EXPIRY ?? '2592000'),
 
   // ─── Mail ─────────────────────────────────────────────────────────────
   // Fallback FROM address when admin hasn't filled the `app.email` setting in

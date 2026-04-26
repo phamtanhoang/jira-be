@@ -34,9 +34,6 @@ import {
 import { CurrentUser, Public } from '@/core/decorators';
 import { AuthUser } from '@/core/types';
 import { AuthService, type SessionMeta } from './auth.service';
-import { isGithubConfigured } from './strategies/github.strategy';
-import { isGoogleConfigured } from './strategies/google.strategy';
-import type { OAuthProfile } from './strategies/oauth.types';
 import {
   ChangePasswordDto,
   ForgotPasswordDto,
@@ -46,6 +43,9 @@ import {
   UpdateProfileDto,
   VerifyEmailDto,
 } from './dto';
+import { isGithubConfigured } from './strategies/github.strategy';
+import { isGoogleConfigured } from './strategies/google.strategy';
+import type { OAuthProfile } from './strategies/oauth.types';
 
 const E = ENDPOINTS.AUTH;
 
@@ -173,7 +173,8 @@ export class AuthController {
   @Public()
   @Get(E.OAUTH_PROVIDERS)
   @ApiOperation({
-    summary: 'Which OAuth providers are configured (drives FE button visibility)',
+    summary:
+      'Which OAuth providers are configured (drives FE button visibility)',
   })
   oauthProviders() {
     return {
@@ -187,7 +188,6 @@ export class AuthController {
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: 'Start Google OAuth flow' })
   // The guard performs the redirect to Google; this handler is never reached.
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
   googleAuth() {}
 
   @Public()
@@ -205,7 +205,6 @@ export class AuthController {
   @Get(E.OAUTH_GITHUB)
   @UseGuards(AuthGuard('github'))
   @ApiOperation({ summary: 'Start GitHub OAuth flow' })
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
   githubAuth() {}
 
   @Public()

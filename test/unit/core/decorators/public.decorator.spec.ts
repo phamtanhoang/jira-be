@@ -5,7 +5,7 @@
  * metadata off them — no invocation happens, so the runtime `this` concern
  * the rule guards against does not apply here.
  */
-/* eslint-disable @typescript-eslint/unbound-method */
+
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY, Public } from '@/core/decorators/public.decorator';
 

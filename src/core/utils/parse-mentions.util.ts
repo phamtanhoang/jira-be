@@ -6,7 +6,8 @@
 // We avoid full HTML parsing — a tight regex over the data-id attribute is
 // enough and stays cheap on hot paths (every comment/description save).
 
-const MENTION_RE = /<span[^>]*\bdata-mention\b[^>]*\bdata-id\s*=\s*["']([0-9a-fA-F-]{36})["'][^>]*>/g;
+const MENTION_RE =
+  /<span[^>]*\bdata-mention\b[^>]*\bdata-id\s*=\s*["']([0-9a-fA-F-]{36})["'][^>]*>/g;
 
 /**
  * Extract distinct user IDs mentioned inside an HTML blob. Returns [] for
