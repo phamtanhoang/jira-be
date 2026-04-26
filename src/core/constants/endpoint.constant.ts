@@ -1,6 +1,7 @@
 export const ENDPOINTS = {
   AUTH: {
     BASE: 'auth',
+    TOKENS: 'tokens',
     REGISTER: 'register',
     VERIFY_EMAIL: 'verify-email',
     LOGIN: 'login',
@@ -57,6 +58,7 @@ export const ENDPOINTS = {
     COMPLETE: ':id/complete',
     BURNDOWN: ':id/burndown',
     VELOCITY: 'velocity/:boardId',
+    CFD: 'cfd/:boardId',
   },
   ISSUES: {
     BASE: 'issues',

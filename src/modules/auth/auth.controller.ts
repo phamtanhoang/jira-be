@@ -33,6 +33,7 @@ import {
 } from '@/core/constants';
 import { CurrentUser, Public } from '@/core/decorators';
 import { AuthUser } from '@/core/types';
+import { SettingsService } from '@/modules/settings/settings.service';
 import { AuthService, type SessionMeta } from './auth.service';
 import {
   ChangePasswordDto,
@@ -52,7 +53,10 @@ const E = ENDPOINTS.AUTH;
 @ApiTags('Auth')
 @Controller(E.BASE)
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private settings: SettingsService,
+  ) {}
 
   @Public()
   @Post(E.REGISTER)
@@ -83,6 +87,12 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    // Reject password logins when admin disabled the password provider.
+    // OAuth flows live on separate routes and aren't gated here.
+    const providers = await this.settings.getAuthProviders();
+    if (!providers.password) {
+      throw new UnauthorizedException(MSG.ERROR.PASSWORD_LOGIN_DISABLED);
+    }
     const tokens = await this.authService.login(dto, extractSessionMeta(req));
 
     res.cookie(
@@ -176,10 +186,15 @@ export class AuthController {
     summary:
       'Which OAuth providers are configured (drives FE button visibility)',
   })
-  oauthProviders() {
+  async oauthProviders() {
+    // The FE renders sign-in buttons + the password form by AND-ing two
+    // signals: env-level configuration (do we have client-id/secret?) and
+    // the admin toggle in `app.auth_providers`. Either off → button hidden.
+    const toggles = await this.settings.getAuthProviders();
     return {
-      google: isGoogleConfigured(),
-      github: isGithubConfigured(),
+      password: toggles.password,
+      google: toggles.google && isGoogleConfigured(),
+      github: toggles.github && isGithubConfigured(),
     };
   }
 

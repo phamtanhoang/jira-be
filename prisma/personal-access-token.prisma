@@ -1,0 +1,26 @@
+// Personal access tokens (PATs) — long-lived bearer tokens for programmatic
+// API access. Stored as SHA-256 hash so a DB leak doesn't directly hand out
+// usable tokens (attacker still needs to brute the preimage).
+//
+// Token format issued to the user: `pat_<32-byte hex>` (64 chars + `pat_`
+// prefix). The prefix is preserved in `tokenPrefix` so the FE can show
+// "pat_abc1…" alongside the masked tail without re-fetching the raw token.
+
+model PersonalAccessToken {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation("PatOwner", fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  // SHA-256 of the raw token (lowercase hex). Unique so we can index-lookup
+  // on the auth path without scanning.
+  tokenHash   String    @unique
+  // First 12 chars of the raw token — safe to show in lists.
+  tokenPrefix String
+  // Future-proofing for granular scopes. Empty array = "all the user can do".
+  scopes      String[]  @default([])
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}

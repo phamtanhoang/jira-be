@@ -9,9 +9,109 @@ import { PrismaService } from '@/core/database/prisma.service';
 import { assertProjectAccess } from '@/core/utils';
 import { CreateSprintDto, UpdateSprintDto } from './dto';
 
+type DailyStatusRow = { day: Date; category: StatusCategory; count: bigint };
+
 @Injectable()
 export class SprintsService {
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * Cumulative Flow Diagram data — for each day in the window, count of issues
+   * by status category. Reconstructs the historical column from `Activity`
+   * rows (`field = boardColumnId`) so the chart shows real transitions, not
+   * just a flat "current state" snapshot. Issues never moved fall back to
+   * their current column (correct since they've been there since creation).
+   *
+   * Window is bounded to [7..90] days by the controller's DTO.
+   */
+  async getCumulativeFlow(boardId: string, userId: string, days: number) {
+    await this.assertBoardAccess(boardId, userId);
+
+    const board = await this.prisma.board.findUnique({
+      where: { id: boardId },
+      select: { projectId: true },
+    });
+    if (!board) throw new NotFoundException(MSG.ERROR.BOARD_NOT_FOUND);
+
+    const since = new Date();
+    since.setUTCHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - (days - 1));
+
+    const rows = await this.prisma.$queryRaw<DailyStatusRow[]>`
+      WITH RECURSIVE
+      day_series AS (
+        SELECT generate_series(
+          ${since}::date,
+          CURRENT_DATE,
+          '1 day'::interval
+        )::date AS day
+      ),
+      issue_state AS (
+        SELECT
+          i."id" AS "issueId",
+          d.day,
+          -- Latest column transition at end of the day. If none yet, fall back
+          -- to the column the issue was first moved FROM (preserving original
+          -- placement). If never moved at all, use current boardColumnId.
+          COALESCE(
+            (
+              SELECT a."newValue"
+              FROM "Activity" a
+              WHERE a."issueId" = i."id"
+                AND a."field" = 'boardColumnId'
+                AND a."createdAt" < (d.day + INTERVAL '1 day')
+              ORDER BY a."createdAt" DESC
+              LIMIT 1
+            ),
+            (
+              SELECT a."oldValue"
+              FROM "Activity" a
+              WHERE a."issueId" = i."id"
+                AND a."field" = 'boardColumnId'
+              ORDER BY a."createdAt" ASC
+              LIMIT 1
+            ),
+            i."boardColumnId"
+          ) AS col_id
+        FROM day_series d
+        CROSS JOIN "Issue" i
+        WHERE i."projectId" = ${board.projectId}
+          AND i."createdAt" < (d.day + INTERVAL '1 day')
+      )
+      SELECT
+        iss.day,
+        bc."category",
+        COUNT(*)::bigint AS "count"
+      FROM issue_state iss
+      LEFT JOIN "BoardColumn" bc ON bc."id" = iss.col_id
+      WHERE bc."category" IS NOT NULL
+      GROUP BY iss.day, bc."category"
+      ORDER BY iss.day ASC
+    `;
+
+    const dayKeys: string[] = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(since.getTime() + i * 24 * 60 * 60 * 1000);
+      dayKeys.push(d.toISOString().slice(0, 10));
+    }
+
+    const map = new Map<
+      string,
+      { TODO: number; IN_PROGRESS: number; DONE: number }
+    >();
+    for (const k of dayKeys) {
+      map.set(k, { TODO: 0, IN_PROGRESS: 0, DONE: 0 });
+    }
+    for (const r of rows) {
+      const key = r.day.toISOString().slice(0, 10);
+      const slot = map.get(key);
+      if (slot) slot[r.category] = Number(r.count);
+    }
+
+    return {
+      data: dayKeys.map((day) => ({ day, ...map.get(day)! })),
+    };
+  }
 
   async create(userId: string, dto: CreateSprintDto) {
     await this.assertBoardAccess(dto.boardId, userId);

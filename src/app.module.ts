@@ -27,6 +27,7 @@ import { IssuesModule } from '@/modules/issues/issues.module';
 import { LabelsModule } from '@/modules/labels/labels.module';
 import { LogsModule } from '@/modules/logs/logs.module';
 import { NotificationsModule } from '@/modules/notifications/notifications.module';
+import { PatModule } from '@/modules/personal-access-tokens/pat.module';
 import { ProjectsModule } from '@/modules/projects/projects.module';
 import { PublicModule } from '@/modules/public/public.module';
 import { SavedFiltersModule } from '@/modules/saved-filters/saved-filters.module';
@@ -63,6 +64,7 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     FeatureFlagsModule,
     AdminAuditModule,
     NotificationsModule,
+    PatModule,
     SavedFiltersModule,
     IssueTemplatesModule,
     InviteLinksModule,

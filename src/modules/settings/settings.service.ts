@@ -63,6 +63,31 @@ export class SettingsService {
   }
 
   /**
+   * Resolved auth-provider toggles. Defaults to all enabled when the row is
+   * missing so a fresh install behaves like before this feature shipped.
+   * Persisted shape: `{ password: bool, google: bool, github: bool }`.
+   */
+  async getAuthProviders(): Promise<{
+    password: boolean;
+    google: boolean;
+    github: boolean;
+  }> {
+    const setting = await this.prisma.setting.findUnique({
+      where: { key: SETTING_KEYS.APP_AUTH_PROVIDERS },
+    });
+    const value = (setting?.value ?? {}) as {
+      password?: boolean;
+      google?: boolean;
+      github?: boolean;
+    };
+    return {
+      password: value.password ?? true,
+      google: value.google ?? true,
+      github: value.github ?? true,
+    };
+  }
+
+  /**
    * Upload a new app logo to Supabase and write its URL into the `app.info`
    * setting's `logoUrl` field. Preserves other fields.
    */

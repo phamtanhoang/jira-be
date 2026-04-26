@@ -1,11 +1,14 @@
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Delete,
   Get,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ENDPOINTS, MSG } from '@/core/constants';
@@ -77,6 +80,21 @@ export class SprintsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.sprintsService.getVelocity(boardId, user.id);
+  }
+
+  @Get(E.CFD)
+  @ApiOperation({
+    summary: 'Cumulative flow diagram — daily count by status category',
+  })
+  getCfd(
+    @Param('boardId') boardId: string,
+    @CurrentUser() user: AuthUser,
+    @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
+  ) {
+    // Clamp 7..90 — short windows are noisy, long ones blow up the
+    // cross-join in the SQL.
+    const clamped = Math.max(7, Math.min(90, days));
+    return this.sprintsService.getCumulativeFlow(boardId, user.id, clamped);
   }
 
   @Delete(E.BY_ID)

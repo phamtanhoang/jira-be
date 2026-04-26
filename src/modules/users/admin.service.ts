@@ -472,7 +472,29 @@ export class AdminService {
     const rows = hasMore ? data.slice(0, take) : data;
     const nextCursor = hasMore ? rows[rows.length - 1].id : null;
 
-    return { data: rows, nextCursor, hasMore };
+    // Bulk-aggregate attachment storage per workspace. Single grouped query
+    // beats N+1 detail lookups when the page shows 50 workspaces.
+    const storageRows =
+      rows.length === 0
+        ? []
+        : await this.prisma.$queryRaw<{ workspaceId: string; bytes: bigint }[]>`
+            SELECT p."workspaceId", COALESCE(SUM(a."fileSize"), 0)::bigint AS "bytes"
+            FROM "Attachment" a
+            JOIN "Issue" i ON i."id" = a."issueId"
+            JOIN "Project" p ON p."id" = i."projectId"
+            WHERE p."workspaceId" IN (${Prisma.join(rows.map((r) => r.id))})
+            GROUP BY p."workspaceId"
+          `;
+    const storageByWs = new Map(
+      storageRows.map((r) => [r.workspaceId, Number(r.bytes)]),
+    );
+
+    const enriched = rows.map((r) => ({
+      ...r,
+      storageBytes: storageByWs.get(r.id) ?? 0,
+    }));
+
+    return { data: enriched, nextCursor, hasMore };
   }
 
   async deleteWorkspace(id: string, actorId: string) {

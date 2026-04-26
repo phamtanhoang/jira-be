@@ -36,6 +36,7 @@ model User {
   workspaceInvites WorkspaceInviteLink[] @relation("WorkspaceInviteCreator")
   notificationPreferences NotificationPreference[] @relation("NotificationPreferenceUser")
   throttleOverrides       ThrottleOverride[]       @relation("ThrottleOverrideAuthor")
+  personalAccessTokens    PersonalAccessToken[]    @relation("PatOwner")
 
   createdFeatureFlags FeatureFlag[]   @relation("FeatureFlagCreator")
   adminAuditLogs      AdminAuditLog[] @relation("AdminAudit")
