@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from 'crypto';
+import { randomBytes, randomInt, randomUUID } from 'crypto';
 import { hash, compare } from 'bcryptjs';
 
 /**
@@ -37,4 +37,18 @@ export function calculateExpiryDate(secondsFromNow: number): Date {
  */
 export function generateRefreshToken(): string {
   return randomUUID();
+}
+
+/**
+ * Generate a URL-safe random token for public share / invite links.
+ * 32-byte base64url is comfortably collision-free and copy-paste friendly.
+ * Strips padding and replaces +/ with -_ so it survives unencoded in URLs.
+ */
+export function generateShareToken(): string {
+  // 24 bytes → 32 base64 chars after padding strip
+  return randomBytes(24)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }

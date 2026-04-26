@@ -20,7 +20,7 @@ import {
   BOARD_COLUMN_SELECT,
 } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import { csvEscape, newMentions } from '@/core/utils';
+import { csvEscape, generateShareToken, newMentions } from '@/core/utils';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { ProjectsService } from '@/modules/projects/projects.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
@@ -617,6 +617,98 @@ export class IssuesService {
         create: { issueId, userId },
       })
       .catch(() => null);
+  }
+
+  // ─── Share Tokens (public read-only links) ───────────
+
+  /**
+   * Mint a fresh share token. Caller must be a project member — token grants
+   * read-only access to anyone with the URL, so we gate creation, not reads.
+   */
+  async createShareToken(
+    issueId: string,
+    userId: string,
+    opts?: { expiresInSec?: number },
+  ) {
+    await this.findById(issueId, userId);
+    const token = generateShareToken();
+    const expiresAt =
+      opts?.expiresInSec && opts.expiresInSec > 0
+        ? new Date(Date.now() + opts.expiresInSec * 1000)
+        : null;
+    return this.prisma.issueShareToken.create({
+      data: { issueId, createdById: userId, token, expiresAt },
+    });
+  }
+
+  async listShareTokens(issueId: string, userId: string) {
+    await this.findById(issueId, userId);
+    return this.prisma.issueShareToken.findMany({
+      where: { issueId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async revokeShareToken(issueId: string, tokenId: string, userId: string) {
+    await this.findById(issueId, userId);
+    const tok = await this.prisma.issueShareToken.findUnique({
+      where: { id: tokenId },
+    });
+    if (!tok || tok.issueId !== issueId) {
+      throw new NotFoundException(MSG.ERROR.SHARE_TOKEN_NOT_FOUND);
+    }
+    await this.prisma.issueShareToken.delete({ where: { id: tokenId } });
+  }
+
+  /**
+   * Public — no auth. Returns a slimmed-down issue suitable for a read-only
+   * page. Bumps viewCount fire-and-forget so it doesn't add latency to the
+   * public read path.
+   */
+  async findByShareToken(token: string) {
+    const tok = await this.prisma.issueShareToken.findUnique({
+      where: { token },
+    });
+    if (!tok) throw new NotFoundException(MSG.ERROR.SHARE_TOKEN_NOT_FOUND);
+    if (tok.expiresAt && tok.expiresAt < new Date()) {
+      throw new NotFoundException(MSG.ERROR.SHARE_TOKEN_EXPIRED);
+    }
+
+    const issue = await this.prisma.issue.findUnique({
+      where: { id: tok.issueId },
+      // Keep author/assignee names but drop emails. Skip worklogs entirely
+      // — those carry hours/cost data that shouldn't leak via a copy-pasted
+      // link.
+      include: {
+        reporter: USER_SELECT_BASIC,
+        assignee: USER_SELECT_BASIC,
+        boardColumn: BOARD_COLUMN_SELECT,
+        labels: { include: { label: true } },
+        comments: {
+          include: { author: USER_SELECT_BASIC },
+          orderBy: { createdAt: 'asc' },
+        },
+        attachments: {
+          select: {
+            id: true,
+            fileName: true,
+            mimeType: true,
+            fileSize: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+    if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
+
+    void this.prisma.issueShareToken
+      .update({
+        where: { id: tok.id },
+        data: { viewCount: { increment: 1 } },
+      })
+      .catch(() => null);
+
+    return issue;
   }
 
   // ─── Issue Links ─────────────────────────────────────

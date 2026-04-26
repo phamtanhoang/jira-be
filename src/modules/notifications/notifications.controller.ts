@@ -1,4 +1,13 @@
-import { Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ENDPOINTS, MSG } from '@/core/constants';
@@ -39,6 +48,29 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Unread notification count for the bell badge' })
   unreadCount(@CurrentUser() user: AuthUser) {
     return this.notificationsService.unreadCount(user.id);
+  }
+
+  @Get(E.PREFERENCES)
+  @ApiOperation({ summary: 'Per-type in-app/email notification preferences' })
+  preferences(@CurrentUser() user: AuthUser) {
+    return this.notificationsService
+      .getPreferences(user.id)
+      .then((preferences) => ({ preferences }));
+  }
+
+  @Put(E.PREFERENCES)
+  @ApiOperation({
+    summary: 'Bulk-update notification preferences (per-type, partial OK)',
+  })
+  async updatePreferences(
+    @CurrentUser() user: AuthUser,
+    @Body() body: Record<string, { inApp?: boolean; email?: boolean }>,
+  ) {
+    const preferences = await this.notificationsService.updatePreferences(
+      user.id,
+      body,
+    );
+    return { message: MSG.SUCCESS.PREFERENCES_UPDATED, preferences };
   }
 
   @Post(E.READ)

@@ -32,6 +32,10 @@ export const ENDPOINTS = {
     BY_ID: ':id',
     MEMBERS: 'members',
     MEMBER_BY_ID: 'members/:memberId',
+    INVITE_LINKS: ':id/invite-links',
+    INVITE_LINK_BY_ID: ':id/invite-links/:linkId',
+    JOIN: 'join/:token',
+    INVITE_PREVIEW: 'join/:token/preview',
   },
   PROJECTS: {
     BASE: 'projects',
@@ -72,6 +76,8 @@ export const ENDPOINTS = {
     WATCHERS: ':id/watchers',
     LINKS: ':id/links',
     LINK_BY_ID: ':id/links/:linkId',
+    SHARE: ':id/share',
+    SHARE_BY_ID: ':id/share/:tokenId',
     EXPORT_CSV: 'export.csv',
   },
   LABELS: {
@@ -141,5 +147,10 @@ export const ENDPOINTS = {
     READ: ':id/read',
     READ_ALL: 'read-all',
     UNREAD_COUNT: 'unread-count',
+    PREFERENCES: 'preferences',
+  },
+  PUBLIC: {
+    BASE: 'public',
+    ISSUE_BY_TOKEN: 'issues/:token',
   },
 } as const;

@@ -40,8 +40,9 @@ model Issue {
   activities    Activity[]
   stars         IssueStar[]
   watchers      IssueWatcher[]
-  outboundLinks IssueLink[]   @relation("IssueLinkSource")
-  inboundLinks  IssueLink[]   @relation("IssueLinkTarget")
+  outboundLinks IssueLink[]      @relation("IssueLinkSource")
+  inboundLinks  IssueLink[]      @relation("IssueLinkTarget")
+  shareTokens   IssueShareToken[]
 
   @@index([projectId])
   @@index([assigneeId])

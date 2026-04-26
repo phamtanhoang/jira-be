@@ -137,6 +137,38 @@ export class IssuesController {
       .then((watchers) => ({ watchers }));
   }
 
+  // ─── Share tokens (public read-only links) ─────────────
+
+  @Get(E.SHARE)
+  @ApiOperation({ summary: 'List active share tokens for this issue' })
+  listShareTokens(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.issuesService
+      .listShareTokens(id, user.id)
+      .then((tokens) => ({ tokens }));
+  }
+
+  @Post(E.SHARE)
+  @ApiOperation({ summary: 'Create a public share token for this issue' })
+  async createShareToken(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: { expiresInSec?: number },
+  ) {
+    const token = await this.issuesService.createShareToken(id, user.id, dto);
+    return { message: MSG.SUCCESS.SHARE_TOKEN_CREATED, token };
+  }
+
+  @Delete(E.SHARE_BY_ID)
+  @ApiOperation({ summary: 'Revoke a share token' })
+  async revokeShareToken(
+    @Param('id') id: string,
+    @Param('tokenId') tokenId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    await this.issuesService.revokeShareToken(id, tokenId, user.id);
+    return { message: MSG.SUCCESS.SHARE_TOKEN_REVOKED };
+  }
+
   // ─── Issue Links ───────────────────────────────────────
 
   @Post(E.LINKS)

@@ -1,0 +1,14 @@
+model NotificationPreference {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation("NotificationPreferenceUser", fields: [userId], references: [id], onDelete: Cascade)
+  // Notification type literal — matches NotificationPayload.type on the
+  // service side ("ISSUE_ASSIGNED", "COMMENT_CREATED", "MENTION_*", ...).
+  // Stored as String so adding a new type doesn't require a migration.
+  type   String
+  inApp  Boolean @default(true)
+  email  Boolean @default(false)
+
+  @@unique([userId, type])
+  @@index([userId])
+}

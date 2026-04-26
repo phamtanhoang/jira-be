@@ -1,0 +1,19 @@
+model WorkspaceInviteLink {
+  id          String        @id @default(uuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  token       String        @unique
+  // Role assigned to users joining via this link. Defaults to MEMBER so
+  // admin links don't accidentally grant elevated access.
+  role        WorkspaceRole @default(MEMBER)
+  // Hard cap on uses. null = unlimited until revoked.
+  maxUses     Int?
+  usedCount   Int           @default(0)
+  expiresAt   DateTime?
+  createdById String
+  createdBy   User          @relation("WorkspaceInviteCreator", fields: [createdById], references: [id])
+  createdAt   DateTime      @default(now())
+
+  @@index([workspaceId])
+  @@index([token])
+}

@@ -32,6 +32,9 @@ model User {
   watchedIssues IssueWatcher[] @relation("IssueWatcherUser")
   notifications Notification[] @relation("NotificationRecipient")
   savedFilters  SavedFilter[]  @relation("SavedFilterOwner")
+  issueShareTokens IssueShareToken[] @relation("IssueShareTokenCreator")
+  workspaceInvites WorkspaceInviteLink[] @relation("WorkspaceInviteCreator")
+  notificationPreferences NotificationPreference[] @relation("NotificationPreferenceUser")
 
   createdFeatureFlags FeatureFlag[]   @relation("FeatureFlagCreator")
   adminAuditLogs      AdminAuditLog[] @relation("AdminAudit")

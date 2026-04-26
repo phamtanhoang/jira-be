@@ -219,7 +219,9 @@ export class WorkspacesService {
     return member;
   }
 
-  private async assertRole(
+  // Public so other modules (invite-links, ...) can gate writes on the
+  // same workspace-role hierarchy without re-implementing the lookup.
+  async assertRole(
     workspaceId: string,
     userId: string,
     roles: WorkspaceRole[],

@@ -17,12 +17,14 @@ import { BoardsModule } from '@/modules/boards/boards.module';
 import { CommentsModule } from '@/modules/comments/comments.module';
 import { DebugModule } from '@/modules/debug/debug.module';
 import { FeatureFlagsModule } from '@/modules/feature-flags/feature-flags.module';
+import { InviteLinksModule } from '@/modules/invite-links/invite-links.module';
 import { IssueTemplatesModule } from '@/modules/issue-templates/issue-templates.module';
 import { IssuesModule } from '@/modules/issues/issues.module';
 import { LabelsModule } from '@/modules/labels/labels.module';
 import { LogsModule } from '@/modules/logs/logs.module';
 import { NotificationsModule } from '@/modules/notifications/notifications.module';
 import { ProjectsModule } from '@/modules/projects/projects.module';
+import { PublicModule } from '@/modules/public/public.module';
 import { SavedFiltersModule } from '@/modules/saved-filters/saved-filters.module';
 import { SettingsModule } from '@/modules/settings/settings.module';
 import { SprintsModule } from '@/modules/sprints/sprints.module';
@@ -58,6 +60,8 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     NotificationsModule,
     SavedFiltersModule,
     IssueTemplatesModule,
+    InviteLinksModule,
+    PublicModule,
     DebugModule,
   ],
   providers: [

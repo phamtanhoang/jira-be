@@ -11,6 +11,7 @@ model Workspace {
 
   members  WorkspaceMember[]
   projects Project[]
+  inviteLinks WorkspaceInviteLink[]
 
   @@index([ownerId])
 }

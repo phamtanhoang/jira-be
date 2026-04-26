@@ -131,4 +131,62 @@ export class NotificationsService {
     }
     await this.prisma.notification.delete({ where: { id: notificationId } });
   }
+
+  // ─── Preferences ────────────────────────────────────
+  // Per-(user, type) toggle for in-app + email channels. Missing rows mean
+  // "default" (in-app on, email off) — we don't pre-seed on signup, just
+  // upsert on first toggle.
+
+  async getPreferences(userId: string) {
+    return this.prisma.notificationPreference.findMany({
+      where: { userId },
+      orderBy: { type: 'asc' },
+    });
+  }
+
+  /**
+   * Bulk upsert. Body: `{ ISSUE_ASSIGNED: { inApp: true, email: false }, ... }`.
+   * We don't bother diffing against current state — Prisma's upsert is
+   * cheap and the dataset is tiny (~7 rows max per user).
+   */
+  async updatePreferences(
+    userId: string,
+    prefs: Record<string, { inApp?: boolean; email?: boolean }>,
+  ) {
+    const ops = Object.entries(prefs).map(([type, value]) =>
+      this.prisma.notificationPreference.upsert({
+        where: { userId_type: { userId, type } },
+        create: {
+          userId,
+          type,
+          inApp: value.inApp ?? true,
+          email: value.email ?? false,
+        },
+        update: {
+          ...(value.inApp !== undefined && { inApp: value.inApp }),
+          ...(value.email !== undefined && { email: value.email }),
+        },
+      }),
+    );
+    await this.prisma.$transaction(ops);
+    return this.getPreferences(userId);
+  }
+
+  /**
+   * Used by triggers (issues, comments) to gate the actual write. When the
+   * user has no row for this type, we fall back to the default policy
+   * (in-app on, email off). Returns true if the user has opted in for the
+   * given channel.
+   */
+  async shouldNotify(
+    userId: string,
+    type: string,
+    channel: 'inApp' | 'email',
+  ): Promise<boolean> {
+    const pref = await this.prisma.notificationPreference.findUnique({
+      where: { userId_type: { userId, type } },
+    });
+    if (!pref) return channel === 'inApp'; // default: in-app on, email off
+    return channel === 'inApp' ? pref.inApp : pref.email;
+  }
 }

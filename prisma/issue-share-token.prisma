@@ -1,0 +1,18 @@
+model IssueShareToken {
+  id          String    @id @default(uuid())
+  issueId     String
+  issue       Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  // 32-byte URL-safe random string. Reasonably collision-free and short
+  // enough to share via copy-paste / chat.
+  token       String    @unique
+  createdById String
+  createdBy   User      @relation("IssueShareTokenCreator", fields: [createdById], references: [id])
+  // Optional expiry (null = never expires). Public reads check this.
+  expiresAt   DateTime?
+  // Bumped atomically on each public hit so admins see usage.
+  viewCount   Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([issueId])
+  @@index([token])
+}
