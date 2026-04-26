@@ -20,7 +20,7 @@ import {
   BOARD_COLUMN_SELECT,
 } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import { newMentions } from '@/core/utils';
+import { csvEscape, newMentions } from '@/core/utils';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { ProjectsService } from '@/modules/projects/projects.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
