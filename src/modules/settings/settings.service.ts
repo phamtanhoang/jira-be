@@ -258,7 +258,9 @@ export interface EmailTemplatesSetting {
   welcome: EmailTemplate;
 }
 
-function normTemplate(value: Partial<EmailTemplate> | undefined): EmailTemplate {
+function normTemplate(
+  value: Partial<EmailTemplate> | undefined,
+): EmailTemplate {
   return {
     subject: typeof value?.subject === 'string' ? value.subject : '',
     html: typeof value?.html === 'string' ? value.html : '',

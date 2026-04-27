@@ -310,9 +310,9 @@ function parseCustomFieldsQuery(
         out[k] = v;
       } else if (
         Array.isArray(v) &&
-        v.every((item) => typeof item === 'string')
+        v.every((item): item is string => typeof item === 'string')
       ) {
-        out[k] = v as string[];
+        out[k] = v;
       }
     }
     return Object.keys(out).length ? out : undefined;

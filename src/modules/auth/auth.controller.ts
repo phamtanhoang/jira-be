@@ -206,7 +206,7 @@ export class AuthController {
   }
 
   @Delete(E.OAUTH_ACCOUNT_BY_PROVIDER)
-  @ApiOperation({ summary: "Unlink an OAuth account from the current user" })
+  @ApiOperation({ summary: 'Unlink an OAuth account from the current user' })
   async unlinkOAuthAccount(
     @CurrentUser() user: AuthUser,
     @Param('provider') provider: string,
