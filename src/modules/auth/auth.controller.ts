@@ -285,10 +285,13 @@ export class AuthController {
       }
       return res.redirect(`${frontend}/dashboard`);
     } catch (err) {
-      const code =
-        err instanceof Error && err.message
-          ? encodeURIComponent(err.message)
-          : 'oauth_failed';
+      // Log the full reason server-side so admins can debug OAuth flow
+      // failures instead of having to decode the redirect URL.
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[auth] OAuth callback failed for ${profile.provider}/${profile.email}: ${message}`,
+      );
+      const code = message ? encodeURIComponent(message) : 'oauth_failed';
       return res.redirect(`${frontend}/sign-in?error=${code}`);
     }
   }

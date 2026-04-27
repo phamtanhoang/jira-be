@@ -202,22 +202,33 @@ export class AuthService {
     }
 
     if (profile.provider && profile.providerId) {
-      await this.prisma.oAuthAccount.upsert({
-        where: {
-          userId_provider: { userId: user.id, provider: profile.provider },
-        },
-        update: {
-          providerId: profile.providerId,
-          email,
-          lastUsedAt: new Date(),
-        },
-        create: {
-          userId: user.id,
-          provider: profile.provider,
-          providerId: profile.providerId,
-          email,
-        },
-      });
+      // Recording the linked OAuth account is supplementary — it powers the
+      // /profile "Connected accounts" UI but isn't required to issue tokens.
+      // Swallow failures so an out-of-date schema (missing OAuthAccount table)
+      // can't block users from logging in. The error is logged for the admin.
+      try {
+        await this.prisma.oAuthAccount.upsert({
+          where: {
+            userId_provider: { userId: user.id, provider: profile.provider },
+          },
+          update: {
+            providerId: profile.providerId,
+            email,
+            lastUsedAt: new Date(),
+          },
+          create: {
+            userId: user.id,
+            provider: profile.provider,
+            providerId: profile.providerId,
+            email,
+          },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `[auth] failed to record OAuthAccount for ${user.id} (${profile.provider}): ${msg}. Continuing login. Run "prisma migrate deploy" to fix.`,
+        );
+      }
     }
 
     const tokens = await this.generateTokens(user.id, user.email, meta);
