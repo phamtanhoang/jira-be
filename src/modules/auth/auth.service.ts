@@ -167,7 +167,13 @@ export class AuthService {
    * method until they set one via password reset).
    */
   async loginWithOAuth(
-    profile: { email: string; name: string | null; image: string | null },
+    profile: {
+      email: string;
+      name: string | null;
+      image: string | null;
+      provider?: 'google' | 'github';
+      providerId?: string;
+    },
     meta?: SessionMeta,
   ) {
     const email = profile.email.toLowerCase();
@@ -195,6 +201,25 @@ export class AuthService {
       });
     }
 
+    if (profile.provider && profile.providerId) {
+      await this.prisma.oAuthAccount.upsert({
+        where: {
+          userId_provider: { userId: user.id, provider: profile.provider },
+        },
+        update: {
+          providerId: profile.providerId,
+          email,
+          lastUsedAt: new Date(),
+        },
+        create: {
+          userId: user.id,
+          provider: profile.provider,
+          providerId: profile.providerId,
+          email,
+        },
+      });
+    }
+
     const tokens = await this.generateTokens(user.id, user.email, meta);
     return {
       ...tokens,
@@ -206,6 +231,50 @@ export class AuthService {
         role: user.role,
       },
     };
+  }
+
+  async listOAuthAccounts(userId: string) {
+    const rows = await this.prisma.oAuthAccount.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        provider: true,
+        email: true,
+        createdAt: true,
+        lastUsedAt: true,
+      },
+    });
+    return rows;
+  }
+
+  /**
+   * Unlink an OAuth provider. Refuse the unlink if the user would otherwise
+   * be locked out — i.e. has no password set and no other OAuth account.
+   */
+  async unlinkOAuthAccount(userId: string, provider: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { password: true },
+    });
+    if (!user) throw new NotFoundException(MSG.ERROR.USER_NOT_FOUND);
+
+    const accounts = await this.prisma.oAuthAccount.findMany({
+      where: { userId },
+      select: { provider: true },
+    });
+    const target = accounts.find((a) => a.provider === provider);
+    if (!target) {
+      throw new NotFoundException(MSG.ERROR.OAUTH_ACCOUNT_NOT_FOUND);
+    }
+    if (!user.password && accounts.length <= 1) {
+      throw new BadRequestException(MSG.ERROR.OAUTH_LAST_LOGIN_METHOD);
+    }
+
+    await this.prisma.oAuthAccount.delete({
+      where: { userId_provider: { userId, provider } },
+    });
+    return { message: MSG.SUCCESS.OAUTH_ACCOUNT_UNLINKED };
   }
 
   async refresh(oldRefreshToken: string, meta?: SessionMeta) {

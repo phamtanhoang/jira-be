@@ -40,6 +40,7 @@ model User {
   createdWebhooks         Webhook[]                @relation("WebhookCreator")
   createdRecurringRules   RecurringIssueRule[]     @relation("RecurringRuleAuthor")
   pushSubscriptions       PushSubscription[]       @relation("UserPushSubscriptions")
+  oauthAccounts           OAuthAccount[]           @relation("OAuthAccountUser")
 
   createdFeatureFlags FeatureFlag[]   @relation("FeatureFlagCreator")
   adminAuditLogs      AdminAuditLog[] @relation("AdminAudit")

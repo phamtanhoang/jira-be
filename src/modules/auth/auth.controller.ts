@@ -198,6 +198,22 @@ export class AuthController {
     };
   }
 
+  @Get(E.OAUTH_ACCOUNTS)
+  @ApiOperation({ summary: "List the current user's linked OAuth accounts" })
+  async listOAuthAccounts(@CurrentUser() user: AuthUser) {
+    const accounts = await this.authService.listOAuthAccounts(user.id);
+    return { data: accounts };
+  }
+
+  @Delete(E.OAUTH_ACCOUNT_BY_PROVIDER)
+  @ApiOperation({ summary: "Unlink an OAuth account from the current user" })
+  async unlinkOAuthAccount(
+    @CurrentUser() user: AuthUser,
+    @Param('provider') provider: string,
+  ) {
+    return this.authService.unlinkOAuthAccount(user.id, provider);
+  }
+
   @Public()
   @Get(E.OAUTH_GOOGLE)
   @UseGuards(AuthGuard('google'))

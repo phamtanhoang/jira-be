@@ -249,36 +249,99 @@ export class MailService {
     this.smtpCache = null;
   }
 
+  /**
+   * Resolve admin-overridden subject + html for a template key. Returns null
+   * fields when the admin has not configured anything for this template, so
+   * callers can fall back to the built-in default.
+   */
+  private async getTemplateOverride(
+    name: 'verification' | 'resetPassword' | 'welcome',
+  ): Promise<{ subject: string | null; html: string | null }> {
+    const setting = await this.prisma.setting.findUnique({
+      where: { key: SETTING_KEYS.APP_EMAIL_TEMPLATES },
+    });
+    const value = (setting?.value ?? {}) as Record<
+      string,
+      { subject?: string; html?: string } | undefined
+    >;
+    const tpl = value[name] ?? {};
+    return {
+      subject: tpl.subject?.trim() || null,
+      html: tpl.html?.trim() || null,
+    };
+  }
+
+  /**
+   * Substitute `{{var}}` tokens in admin-supplied HTML. Tokens are limited to
+   * the small set we know is safe to expose — `appName`, `logoUrl`, `otp`,
+   * `expiryMinutes`, `recipientEmail`. Unknown placeholders are left intact.
+   */
+  private renderTemplate(
+    template: string,
+    vars: Record<string, string | number>,
+  ): string {
+    return template.replace(/\{\{\s*([a-zA-Z_]+)\s*\}\}/g, (match, key) => {
+      const v = vars[key as string];
+      return v === undefined || v === null ? match : String(v);
+    });
+  }
+
   async sendVerificationEmail(email: string, otp: string): Promise<void> {
     const appInfo = await this.getAppInfo();
+    const override = await this.getTemplateOverride('verification');
+    const expiryMinutes = Math.round(ENV.TOKEN_VERIFY_EXPIRY / 60);
+    const vars = {
+      appName: appInfo.name ?? '',
+      logoUrl: appInfo.logoUrl ?? '',
+      otp,
+      expiryMinutes,
+      recipientEmail: email,
+    };
     await this.send({
       to: email,
-      subject: 'Verify your email',
-      html: otpEmailTemplate({
-        appName: appInfo.name ?? '',
-        logoUrl: appInfo.logoUrl ?? '',
-        otp,
-        expirySeconds: ENV.TOKEN_VERIFY_EXPIRY,
-        title: 'Verify your email',
-        description: 'Enter the code below to verify your email address.',
-      }),
+      subject: override.subject
+        ? this.renderTemplate(override.subject, vars)
+        : 'Verify your email',
+      html: override.html
+        ? this.renderTemplate(override.html, vars)
+        : otpEmailTemplate({
+            appName: vars.appName,
+            logoUrl: vars.logoUrl,
+            otp,
+            expirySeconds: ENV.TOKEN_VERIFY_EXPIRY,
+            title: 'Verify your email',
+            description: 'Enter the code below to verify your email address.',
+          }),
       type: MailType.VERIFICATION,
     });
   }
 
   async sendResetPasswordEmail(email: string, otp: string): Promise<void> {
     const appInfo = await this.getAppInfo();
+    const override = await this.getTemplateOverride('resetPassword');
+    const expiryMinutes = Math.round(ENV.TOKEN_VERIFY_EXPIRY / 60);
+    const vars = {
+      appName: appInfo.name ?? '',
+      logoUrl: appInfo.logoUrl ?? '',
+      otp,
+      expiryMinutes,
+      recipientEmail: email,
+    };
     await this.send({
       to: email,
-      subject: 'Reset your password',
-      html: otpEmailTemplate({
-        appName: appInfo.name ?? '',
-        logoUrl: appInfo.logoUrl ?? '',
-        otp,
-        expirySeconds: ENV.TOKEN_VERIFY_EXPIRY,
-        title: 'Reset your password',
-        description: 'Enter the code below to reset your password.',
-      }),
+      subject: override.subject
+        ? this.renderTemplate(override.subject, vars)
+        : 'Reset your password',
+      html: override.html
+        ? this.renderTemplate(override.html, vars)
+        : otpEmailTemplate({
+            appName: vars.appName,
+            logoUrl: vars.logoUrl,
+            otp,
+            expirySeconds: ENV.TOKEN_VERIFY_EXPIRY,
+            title: 'Reset your password',
+            description: 'Enter the code below to reset your password.',
+          }),
       type: MailType.PASSWORD_RESET,
     });
   }

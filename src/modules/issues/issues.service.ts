@@ -87,6 +87,48 @@ type IssueWithUserMeta = {
   watchers?: { userId: string }[];
 } & Record<string, unknown>;
 
+/**
+ * Build the per-row `customFieldValues.some` match clause for a given field
+ * type. Returns null when the value is empty or fails to coerce — caller
+ * should skip filtering on that field rather than fail the whole query.
+ */
+function customFieldValueMatch(
+  type: 'TEXT' | 'NUMBER' | 'DATE' | 'SELECT' | 'MULTI_SELECT',
+  value: string | string[],
+): Prisma.CustomFieldValueWhereInput | null {
+  const first = Array.isArray(value) ? value[0] : value;
+  if (typeof first !== 'string' || first === '') return null;
+  switch (type) {
+    case 'TEXT':
+      return {
+        valueText: { contains: first, mode: Prisma.QueryMode.insensitive },
+      };
+    case 'NUMBER': {
+      const n = Number(first);
+      if (Number.isNaN(n)) return null;
+      return { valueNumber: n };
+    }
+    case 'DATE': {
+      const start = new Date(first);
+      if (Number.isNaN(start.getTime())) return null;
+      // Match the same calendar day in UTC.
+      const next = new Date(start);
+      next.setUTCDate(start.getUTCDate() + 1);
+      return { valueDate: { gte: start, lt: next } };
+    }
+    case 'SELECT':
+    case 'MULTI_SELECT': {
+      const candidates = Array.isArray(value)
+        ? value.filter((v) => typeof v === 'string' && v !== '')
+        : [first];
+      if (candidates.length === 0) return null;
+      return { valueSelect: { hasSome: candidates } };
+    }
+    default:
+      return null;
+  }
+}
+
 function decorateUserMeta<T extends IssueWithUserMeta>(
   issue: T,
 ): Omit<T, 'stars' | 'watchers'> & {
@@ -220,6 +262,14 @@ export class IssuesService {
       search?: string;
       cursor?: string;
       take?: number;
+      // Map of customFieldId → value to filter by. Accepted shapes:
+      //   TEXT      → string (case-insensitive contains)
+      //   NUMBER    → string parsed as Number (exact match)
+      //   DATE      → ISO date string (exact day match)
+      //   SELECT    → string (must appear in `valueSelect`)
+      //   MULTI_SELECT → string OR string[] (any of the values must match)
+      // Unknown fieldIds are silently ignored.
+      customFields?: Record<string, string | string[]>;
     },
   ) {
     const project = await this.prisma.project.findUnique({
@@ -233,7 +283,12 @@ export class IssuesService {
       project.workspaceId,
     );
 
-    const where = {
+    const customFieldClauses = await this.buildCustomFieldClauses(
+      projectId,
+      filters?.customFields,
+    );
+
+    const where: Prisma.IssueWhereInput = {
       projectId,
       ...(filters?.sprintId &&
         filters.sprintId !== 'backlog' && { sprintId: filters.sprintId }),
@@ -257,6 +312,7 @@ export class IssuesService {
           },
         ],
       }),
+      ...(customFieldClauses.length > 0 && { AND: customFieldClauses }),
     };
 
     const take = filters?.take ?? 0; // 0 = no limit (backward compatible)
@@ -613,6 +669,44 @@ export class IssuesService {
   // Look up the workspaceId for the issue's project then forward to the
   // webhook dispatcher. Pulled out so issue.create/update/move/delete don't
   // each duplicate the lookup.
+  /**
+   * Translate the FE's `customFields` filter map into Prisma `where` clauses.
+   * Each entry becomes a `customFieldValues: { some: { fieldId, ...match } }`
+   * combined under AND so filters compose. Definitions are loaded once to
+   * coerce raw input strings into the right column (text/number/date/select).
+   */
+  private async buildCustomFieldClauses(
+    projectId: string,
+    raw: Record<string, string | string[]> | undefined,
+  ): Promise<Prisma.IssueWhereInput[]> {
+    if (!raw) return [];
+    const fieldIds = Object.keys(raw).filter((id) => {
+      const v = raw[id];
+      if (Array.isArray(v)) return v.length > 0;
+      return typeof v === 'string' && v.length > 0;
+    });
+    if (fieldIds.length === 0) return [];
+
+    const defs = await this.prisma.customFieldDef.findMany({
+      where: { projectId, id: { in: fieldIds } },
+      select: { id: true, type: true },
+    });
+    const defById = new Map(defs.map((d) => [d.id, d.type]));
+
+    const clauses: Prisma.IssueWhereInput[] = [];
+    for (const fieldId of fieldIds) {
+      const type = defById.get(fieldId);
+      if (!type) continue;
+      const value = raw[fieldId];
+      const match = customFieldValueMatch(type, value);
+      if (!match) continue;
+      clauses.push({
+        customFieldValues: { some: { fieldId, ...match } },
+      });
+    }
+    return clauses;
+  }
+
   private async fireIssueWebhook(
     event: string,
     issue: {

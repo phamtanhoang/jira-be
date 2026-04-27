@@ -21,6 +21,8 @@ export const ENDPOINTS = {
     OAUTH_GITHUB: 'github',
     OAUTH_GITHUB_CALLBACK: 'github/callback',
     OAUTH_PROVIDERS: 'oauth/providers',
+    OAUTH_ACCOUNTS: 'oauth/accounts',
+    OAUTH_ACCOUNT_BY_PROVIDER: 'oauth/accounts/:provider',
   },
   SETTINGS: {
     BASE: 'settings',
@@ -131,6 +133,7 @@ export const ENDPOINTS = {
     MAIL_LOG_STATS: 'mail-logs/stats',
     MAIL_LOG_CONFIG: 'mail-logs/config-status',
     MAIL_TEST: 'mail-logs/test',
+    MAIL_TEMPLATE_TEST: 'mail-logs/template-test',
     USERS_BULK_INVITE: 'users/bulk-invite',
     THROTTLE_OVERRIDES: 'throttle-overrides',
     THROTTLE_OVERRIDE_BY_ID: 'throttle-overrides/:id',

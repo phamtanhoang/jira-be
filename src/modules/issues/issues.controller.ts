@@ -55,6 +55,7 @@ export class IssuesController {
     @Query('search') search: string,
     @Query('cursor') cursor: string,
     @Query('take') take: string,
+    @Query('customFields') customFields: string,
     @CurrentUser() user: AuthUser,
   ) {
     return this.issuesService.findAll(projectId, user.id, {
@@ -65,6 +66,7 @@ export class IssuesController {
       search,
       cursor,
       take: take ? parseInt(take) : undefined,
+      customFields: parseCustomFieldsQuery(customFields),
     });
   }
 
@@ -285,5 +287,36 @@ export class IssuesController {
   ) {
     await this.issuesService.removeLabel(id, labelId, user.id);
     return { message: MSG.SUCCESS.LABEL_REMOVED };
+  }
+}
+
+/**
+ * Decode the `customFields` query param. FE sends a JSON-encoded
+ * `Record<fieldId, string | string[]>`. Unparsable input is treated as no
+ * filter so a malformed query never 500s on a list endpoint.
+ */
+function parseCustomFieldsQuery(
+  raw: string | undefined,
+): Record<string, string | string[]> | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return undefined;
+    }
+    const out: Record<string, string | string[]> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === 'string') {
+        out[k] = v;
+      } else if (
+        Array.isArray(v) &&
+        v.every((item) => typeof item === 'string')
+      ) {
+        out[k] = v as string[];
+      }
+    }
+    return Object.keys(out).length ? out : undefined;
+  } catch {
+    return undefined;
   }
 }

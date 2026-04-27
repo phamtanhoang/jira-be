@@ -11,7 +11,11 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { MailType, Role } from '@prisma/client';
 import { ENDPOINTS, MSG } from '@/core/constants';
 import { Roles } from '@/core/decorators';
-import { MailLogQueryDto, MailTestDto } from './dto/mail-log-query.dto';
+import {
+  MailLogQueryDto,
+  MailTemplateTestDto,
+  MailTestDto,
+} from './dto/mail-log-query.dto';
 import { MailLogService } from './mail-log.service';
 import { MailService } from './mail.service';
 
@@ -71,6 +75,23 @@ export class MailLogController {
       html: testEmailHtml(),
       type: MailType.OTHER,
     });
+    return { message: MSG.SUCCESS.MAIL_TEST_SENT };
+  }
+
+  @Post(E.MAIL_TEMPLATE_TEST)
+  @ApiOperation({
+    summary:
+      'Send the saved verification/reset template to the given address (Admin)',
+  })
+  async sendTemplateTest(@Body() dto: MailTemplateTestDto) {
+    // Use a fixed sample OTP so the recipient sees the template's placeholder
+    // substitution working end-to-end against the saved settings.
+    const sampleOtp = '123456';
+    if (dto.template === 'verification') {
+      await this.mail.sendVerificationEmail(dto.to, sampleOtp);
+    } else {
+      await this.mail.sendResetPasswordEmail(dto.to, sampleOtp);
+    }
     return { message: MSG.SUCCESS.MAIL_TEST_SENT };
   }
 }

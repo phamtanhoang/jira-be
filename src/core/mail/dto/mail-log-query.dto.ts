@@ -40,3 +40,15 @@ export class MailTestDto {
   @IsString()
   to!: string;
 }
+
+export class MailTemplateTestDto {
+  @ApiPropertyOptional({ description: 'Recipient address for the test email' })
+  @IsString()
+  to!: string;
+
+  @ApiPropertyOptional({
+    description: 'Which template to send: verification | resetPassword',
+  })
+  @IsEnum(['verification', 'resetPassword'] as const)
+  template!: 'verification' | 'resetPassword';
+}

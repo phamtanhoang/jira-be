@@ -113,6 +113,25 @@ export class SettingsService {
   }
 
   /**
+   * Admin-overridable email templates. Each entry stores a subject + HTML
+   * body. Empty strings (or missing fields) fall back to built-in defaults
+   * inside MailService. Persisted shape:
+   *   `{ verification: { subject, html }, resetPassword: { subject, html },
+   *      welcome: { subject, html } }`
+   */
+  async getEmailTemplates(): Promise<EmailTemplatesSetting> {
+    const setting = await this.prisma.setting.findUnique({
+      where: { key: SETTING_KEYS.APP_EMAIL_TEMPLATES },
+    });
+    const value = (setting?.value ?? {}) as Partial<EmailTemplatesSetting>;
+    return {
+      verification: normTemplate(value.verification),
+      resetPassword: normTemplate(value.resetPassword),
+      welcome: normTemplate(value.welcome),
+    };
+  }
+
+  /**
    * Upload a new app logo to Supabase and write its URL into the `app.info`
    * setting's `logoUrl` field. Preserves other fields.
    */
@@ -226,4 +245,22 @@ function mergeAppEmailPassword(
 function asPlainObject(v: unknown): Record<string, unknown> | null {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) return null;
   return v as Record<string, unknown>;
+}
+
+export interface EmailTemplate {
+  subject: string;
+  html: string;
+}
+
+export interface EmailTemplatesSetting {
+  verification: EmailTemplate;
+  resetPassword: EmailTemplate;
+  welcome: EmailTemplate;
+}
+
+function normTemplate(value: Partial<EmailTemplate> | undefined): EmailTemplate {
+  return {
+    subject: typeof value?.subject === 'string' ? value.subject : '',
+    html: typeof value?.html === 'string' ? value.html : '',
+  };
 }
