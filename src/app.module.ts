@@ -19,6 +19,7 @@ import { AttachmentsModule } from '@/modules/attachments/attachments.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { BoardsModule } from '@/modules/boards/boards.module';
 import { CommentsModule } from '@/modules/comments/comments.module';
+import { CustomFieldsModule } from '@/modules/custom-fields/custom-fields.module';
 import { DebugModule } from '@/modules/debug/debug.module';
 import { FeatureFlagsModule } from '@/modules/feature-flags/feature-flags.module';
 import { GdprModule } from '@/modules/gdpr/gdpr.module';
@@ -31,6 +32,8 @@ import { NotificationsModule } from '@/modules/notifications/notifications.modul
 import { PatModule } from '@/modules/personal-access-tokens/pat.module';
 import { ProjectsModule } from '@/modules/projects/projects.module';
 import { PublicModule } from '@/modules/public/public.module';
+import { PushModule } from '@/modules/push/push.module';
+import { RecurringIssuesModule } from '@/modules/recurring-issues/recurring-issues.module';
 import { SavedFiltersModule } from '@/modules/saved-filters/saved-filters.module';
 import { SettingsModule } from '@/modules/settings/settings.module';
 import { SprintsModule } from '@/modules/sprints/sprints.module';
@@ -60,6 +63,9 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     IssuesModule,
     LabelsModule,
     CommentsModule,
+    CustomFieldsModule,
+    RecurringIssuesModule,
+    PushModule,
     WorklogsModule,
     AttachmentsModule,
     UsersModule,

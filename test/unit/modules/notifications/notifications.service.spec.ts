@@ -34,7 +34,10 @@ describe('NotificationsService', () => {
 
   beforeEach(() => {
     prisma = createMockPrisma();
-    service = new NotificationsService(prisma as never);
+    // Stub push: the spec only cares that the in-app rows are written —
+    // push fan-out is fire-and-forget so we plug in a noop.
+    const pushStub = { sendToUser: jest.fn() };
+    service = new NotificationsService(prisma as never, pushStub as never);
   });
 
   describe('create()', () => {

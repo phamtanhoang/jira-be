@@ -22,6 +22,8 @@ model Project {
   labels        Label[]
   savedFilters  SavedFilter[]
   issueTemplates IssueTemplate[]
+  customFields  CustomFieldDef[]     @relation("ProjectCustomFields")
+  recurringRules RecurringIssueRule[] @relation("ProjectRecurringRules")
 
   @@unique([workspaceId, key])
   @@index([workspaceId])

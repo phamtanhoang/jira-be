@@ -1,0 +1,38 @@
+// Recurring issue rules — schedule-based issue auto-creation.
+//
+// `template` carries the issue payload as JSON: { summary, description?,
+// type?, priority?, assigneeId?, labels? }. We don't reference fields by
+// FK because they may be deleted between creates (label disappeared,
+// assignee removed) — the rule degrades gracefully by dropping the missing
+// pieces at create time rather than failing the cron.
+//
+// `frequency` is a coarse enum (DAILY/WEEKLY/MONTHLY) so the FE can offer
+// a friendly picker. `nextRunAt` is the precise time the next issue is
+// due — cron compares it against `now()` every hour.
+
+enum RecurringFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+model RecurringIssueRule {
+  id          String             @id @default(uuid())
+  projectId   String
+  project     Project            @relation("ProjectRecurringRules", fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  template    Json
+  frequency   RecurringFrequency
+  // Hour of day (0-23) when the rule fires. Server-local time.
+  hour        Int                @default(9)
+  nextRunAt   DateTime
+  lastRunAt   DateTime?
+  enabled     Boolean            @default(true)
+  createdById String?
+  createdBy   User?              @relation("RecurringRuleAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([projectId])
+  @@index([enabled, nextRunAt])
+}

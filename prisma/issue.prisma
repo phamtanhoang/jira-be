@@ -43,6 +43,7 @@ model Issue {
   outboundLinks IssueLink[]      @relation("IssueLinkSource")
   inboundLinks  IssueLink[]      @relation("IssueLinkTarget")
   shareTokens   IssueShareToken[]
+  customFieldValues CustomFieldValue[] @relation("IssueCustomFields")
 
   @@index([projectId])
   @@index([assigneeId])

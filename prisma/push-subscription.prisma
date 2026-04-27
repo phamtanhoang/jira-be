@@ -1,0 +1,17 @@
+// Web Push API subscriptions per user. One row per (user, browser/device).
+// `endpoint` is unique — re-subscribing from the same browser overwrites
+// the previous keys via upsert in the FE flow.
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation("UserPushSubscriptions", fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}

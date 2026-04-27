@@ -1,13 +1,17 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { PushService } from '@/modules/push/push.service';
 import type { NotificationPayload } from './dto';
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private push: PushService,
+  ) {}
 
   // ─── Write side ─────────────────────────────────────
   // create / createMany are fire-and-forget. They never throw — a failure to
@@ -31,6 +35,13 @@ export class NotificationsService {
           err instanceof Error ? err.stack : String(err),
         );
       });
+    // Web Push fan-out alongside the in-app row. Disabled when VAPID
+    // keys aren't configured (sendToUser is a no-op then).
+    this.push.sendToUser(userId, {
+      title: payload.title,
+      body: payload.body,
+      link: payload.link,
+    });
   }
 
   // De-duplicates the recipient set, drops empties, then issues a single
@@ -39,6 +50,13 @@ export class NotificationsService {
   createMany(userIds: string[], payload: NotificationPayload): void {
     const unique = Array.from(new Set(userIds.filter(Boolean)));
     if (unique.length === 0) return;
+    for (const userId of unique) {
+      this.push.sendToUser(userId, {
+        title: payload.title,
+        body: payload.body,
+        link: payload.link,
+      });
+    }
     void this.prisma.notification
       .createMany({
         data: unique.map((userId) => ({

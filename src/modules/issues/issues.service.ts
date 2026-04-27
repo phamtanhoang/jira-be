@@ -26,6 +26,7 @@ import {
   newMentions,
   sanitizeRichHtml,
 } from '@/core/utils';
+import { CustomFieldsService } from '@/modules/custom-fields/custom-fields.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { ProjectsService } from '@/modules/projects/projects.service';
 import { WebhooksService } from '@/modules/webhooks/webhooks.service';
@@ -42,6 +43,15 @@ const ISSUE_INCLUDE = {
   parent: { select: { id: true, key: true, summary: true } },
   epic: { select: { id: true, key: true, summary: true } },
   labels: { include: { label: true } },
+  customFieldValues: {
+    select: {
+      fieldId: true,
+      valueText: true,
+      valueNumber: true,
+      valueDate: true,
+      valueSelect: true,
+    },
+  },
   _count: { select: { children: true, comments: true, attachments: true } },
 };
 
@@ -99,6 +109,7 @@ export class IssuesService {
     private projectsService: ProjectsService,
     private notifications: NotificationsService,
     private webhooks: WebhooksService,
+    private customFields: CustomFieldsService,
   ) {}
 
   async create(userId: string, dto: CreateIssueDto) {
@@ -173,6 +184,15 @@ export class IssuesService {
       // notifications without an explicit "Watch" click.
       if (dto.assigneeId) this.autoWatch(issue.id, dto.assigneeId);
       this.autoWatch(issue.id, userId);
+
+      // Apply custom field values if the payload includes them. Best-effort:
+      // a bad fieldId or wrong-type value is silently dropped rather than
+      // failing the whole issue create.
+      if (dto.customFields) {
+        await this.customFields
+          .applyCustomFieldValues(issue.id, project.id, dto.customFields)
+          .catch(() => null);
+      }
 
       this.webhooks.dispatch(project.workspaceId, 'issue.created', {
         issue: {
@@ -436,6 +456,8 @@ export class IssuesService {
 
     for (const [field, value] of Object.entries(dto)) {
       if (value === undefined) continue;
+      // customFields is handled out-of-band after the issue update.
+      if (field === 'customFields') continue;
       const oldVal = (issue as Record<string, unknown>)[field];
       if (field === 'dueDate' || field === 'startDate') {
         data[field] = value ? new Date(value as string) : null;
@@ -506,6 +528,12 @@ export class IssuesService {
         body: updated.summary,
         link: `/issues/${updated.key}`,
       });
+    }
+
+    if (dto.customFields) {
+      await this.customFields
+        .applyCustomFieldValues(issueId, issue.projectId, dto.customFields)
+        .catch(() => null);
     }
 
     void this.fireIssueWebhook('issue.updated', updated, userId);

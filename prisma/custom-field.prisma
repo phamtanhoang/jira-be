@@ -1,0 +1,52 @@
+// Per-project custom fields. Definition + value tables split so we can
+// rename / re-order fields without touching the values.
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+  MULTI_SELECT
+}
+
+model CustomFieldDef {
+  id        String          @id @default(uuid())
+  projectId String
+  project   Project         @relation("ProjectCustomFields", fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  type      CustomFieldType
+  // For SELECT / MULTI_SELECT — list of allowed string values. Free-form
+  // for TEXT/NUMBER/DATE (kept as empty array). JSON column tolerates
+  // schema evolution (e.g. future "color per option").
+  options   Json            @default("[]")
+  required  Boolean         @default(false)
+  // Render order on the issue sidebar. Lower = higher.
+  position  Int             @default(0)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  values    CustomFieldValue[] @relation("FieldValues")
+
+  @@unique([projectId, name])
+  @@index([projectId, position])
+}
+
+model CustomFieldValue {
+  id          String          @id @default(uuid())
+  fieldId     String
+  field       CustomFieldDef  @relation("FieldValues", fields: [fieldId], references: [id], onDelete: Cascade)
+  issueId     String
+  issue       Issue           @relation("IssueCustomFields", fields: [issueId], references: [id], onDelete: Cascade)
+  // Only ONE of these is populated, by `field.type`. Splitting per-type
+  // beats a single Json blob — gives us proper indexes for filter queries
+  // (e.g. "where customField X = 'foo'") without JSONB ops.
+  valueText   String?
+  valueNumber Float?
+  valueDate   DateTime?
+  // SELECT stores 1 element; MULTI_SELECT stores N. Single column simplifies
+  // the union query for both types.
+  valueSelect String[]        @default([])
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([fieldId, issueId])
+  @@index([issueId])
+}

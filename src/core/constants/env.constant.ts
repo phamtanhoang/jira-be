@@ -59,6 +59,13 @@ export const ENV = {
   // Defaults to the first CORS_ORIGIN entry if unset.
   FRONTEND_URL: process.env.FRONTEND_URL ?? '',
 
+  // ─── Web Push (VAPID) ────────────────────────────────────
+  // When VAPID_PUBLIC_KEY is empty, push module stays dormant — endpoints
+  // 503 instead of failing silently. Subject must be `mailto:` or https URL.
+  VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY ?? '',
+  VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY ?? '',
+  VAPID_SUBJECT: process.env.VAPID_SUBJECT ?? '',
+
   // ─── Derived flags — single place we compare NODE_ENV ─────────────────
   IS_PRODUCTION: NODE_ENV === 'production',
   IS_DEVELOPMENT: NODE_ENV === 'development',

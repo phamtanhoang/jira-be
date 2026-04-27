@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
@@ -71,4 +72,11 @@ export class CreateIssueDto {
   @IsDateString()
   @IsOptional()
   dueDate?: string;
+
+  @ApiPropertyOptional({
+    description: 'Map fieldId → value. Type-coerced + validated server-side.',
+  })
+  @IsObject()
+  @IsOptional()
+  customFields?: Record<string, unknown>;
 }

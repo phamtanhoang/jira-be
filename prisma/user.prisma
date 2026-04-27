@@ -38,6 +38,8 @@ model User {
   throttleOverrides       ThrottleOverride[]       @relation("ThrottleOverrideAuthor")
   personalAccessTokens    PersonalAccessToken[]    @relation("PatOwner")
   createdWebhooks         Webhook[]                @relation("WebhookCreator")
+  createdRecurringRules   RecurringIssueRule[]     @relation("RecurringRuleAuthor")
+  pushSubscriptions       PushSubscription[]       @relation("UserPushSubscriptions")
 
   createdFeatureFlags FeatureFlag[]   @relation("FeatureFlagCreator")
   adminAuditLogs      AdminAuditLog[] @relation("AdminAudit")
