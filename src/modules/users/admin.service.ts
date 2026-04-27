@@ -267,11 +267,18 @@ export class AdminService {
    * count with p50/p95/p99 latency + error count, plus method/status
    * distributions.
    */
-  async getMetrics(sinceHours = 24, take = 10) {
+  async getMetrics(
+    sinceHours = 24,
+    take: number | { topRoutes: number; slowest: number } = 10,
+  ) {
     const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
-    // Clamp: bigger pages just slow down the percentile rollup without adding
-    // value to the UI.
-    const limit = Math.min(Math.max(take, 1), 100);
+    // Each list paginates independently. Clamp per-list so neither one can
+    // blow up the request.
+    const clamp = (n: number) => Math.min(Math.max(n, 1), 100);
+    const topRoutesLimit =
+      typeof take === 'number' ? clamp(take) : clamp(take.topRoutes);
+    const slowestLimit =
+      typeof take === 'number' ? clamp(take) : clamp(take.slowest);
 
     const [topRoutesRaw, methodsRaw, statusesRaw, slowestRaw, errorTrendRaw] =
       await Promise.all([
@@ -287,7 +294,7 @@ export class AdminService {
           AND "route" IS NOT NULL
         GROUP BY "route"
         ORDER BY "count" DESC
-        LIMIT ${limit}
+        LIMIT ${topRoutesLimit}
       `,
         this.prisma.requestLog.groupBy({
           by: ['method'],
@@ -308,7 +315,7 @@ export class AdminService {
         WHERE "createdAt" >= ${since}
           AND "durationMs" IS NOT NULL
         ORDER BY "durationMs" DESC NULLS LAST
-        LIMIT ${limit}
+        LIMIT ${slowestLimit}
       `,
         this.prisma.$queryRaw<HourlyErrorRow[]>`
         SELECT DATE_TRUNC('hour', "createdAt") AS "bucket",
