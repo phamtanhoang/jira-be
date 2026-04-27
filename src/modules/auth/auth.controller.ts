@@ -29,6 +29,7 @@ import {
   MSG,
   UPLOAD_LIMITS,
   accessTokenCookieOptions,
+  fePublicCookieOptions,
   refreshTokenCookieOptions,
 } from '@/core/constants';
 import { CurrentUser, Public } from '@/core/decorators';
@@ -270,6 +271,18 @@ export class AuthController {
         tokens.refreshToken,
         refreshTokenCookieOptions(),
       );
+      // Edge middleware checks `is_authenticated` to allow protected routes
+      // and `user_role` to bypass maintenance for admins. Password login
+      // sets these on the FE; OAuth has no JS in the redirect chain so we
+      // set them server-side here.
+      res.cookie(COOKIE_KEYS.IS_AUTHENTICATED, '1', fePublicCookieOptions());
+      if (tokens.user.role) {
+        res.cookie(
+          COOKIE_KEYS.USER_ROLE,
+          tokens.user.role,
+          fePublicCookieOptions(),
+        );
+      }
       return res.redirect(`${frontend}/dashboard`);
     } catch (err) {
       const code =
