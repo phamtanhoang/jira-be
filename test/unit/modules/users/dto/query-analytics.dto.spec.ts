@@ -32,8 +32,6 @@ describe('QueryAnalyticsDto', () => {
   it('has no upper bound — admin endpoint, FE drives the UX cap', async () => {
     // 5 years' worth of hours should still pass; effective ceiling is the
     // RequestLog retention cron, not the DTO.
-    expect(
-      await validate(toDto({ sinceHours: 24 * 365 * 5 })),
-    ).toHaveLength(0);
+    expect(await validate(toDto({ sinceHours: 24 * 365 * 5 }))).toHaveLength(0);
   });
 });

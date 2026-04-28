@@ -29,8 +29,6 @@ describe('QueryMetricsDto', () => {
   it('has no upper bound — admin endpoint, FE drives the UX cap', async () => {
     // The DTO no longer caps `sinceHours`; effective ceiling is the
     // RequestLog retention cron, not validation.
-    expect(
-      await validate(toDto({ sinceHours: 24 * 365 })),
-    ).toHaveLength(0);
+    expect(await validate(toDto({ sinceHours: 24 * 365 }))).toHaveLength(0);
   });
 });
