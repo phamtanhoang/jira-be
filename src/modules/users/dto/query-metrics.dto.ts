@@ -3,13 +3,15 @@ import { Transform } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class QueryMetricsDto {
-  @ApiPropertyOptional({ example: 24, minimum: 1, maximum: 168 })
+  // No upper cap — admin-only endpoint, FE RangePicker drives the UX
+  // bound. Effective ceiling is RequestLog retention (rows older than
+  // `LOG_RETENTION_EXPIRY` are pruned by the cleanup cron anyway).
+  @ApiPropertyOptional({ example: 24, minimum: 1 })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? parseInt(value, 10) : value,
   )
   @IsInt()
   @Min(1)
-  @Max(168)
   @IsOptional()
   sinceHours?: number;
 

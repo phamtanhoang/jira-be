@@ -141,9 +141,14 @@ export class AdminService {
    * request-log-by-level. Gaps (days with zero rows) are filled so the chart
    * shows a continuous timeline.
    */
-  async getAnalytics(days = 14) {
+  async getAnalytics(sinceHours = 24 * 14) {
     const now = new Date();
-    // Start of "today - (days-1)" so days=14 returns 14 buckets up to today.
+    // Round the requested hour-window up to whole days so we always emit a
+    // complete bucket count. The chart aggregates by day, so sub-day
+    // precision wouldn't change the rendered output.
+    const days = Math.max(1, Math.ceil(sinceHours / 24));
+    // Start of "today - (days-1)" so e.g. days=14 returns 14 buckets up to
+    // today.
     const since = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
     since.setUTCHours(0, 0, 0, 0);
 

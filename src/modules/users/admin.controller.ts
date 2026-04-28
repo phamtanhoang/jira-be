@@ -49,7 +49,7 @@ export class AdminController {
     summary: 'Daily time-series (signups, issues, workspaces, logs-by-level)',
   })
   getAnalytics(@Query() query: QueryAnalyticsDto) {
-    return this.adminService.getAnalytics(query.days ?? 14);
+    return this.adminService.getAnalytics(query.sinceHours ?? 24 * 14);
   }
 
   @Get(E.METRICS)
