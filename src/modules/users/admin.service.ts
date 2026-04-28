@@ -366,12 +366,18 @@ export class AdminService {
    * Aggregate user activity from RequestLog, excluding admin-origin traffic.
    * Gives admins a read on what end-users actually do in the app.
    */
-  async getUserActivity(sinceHours = 168, take = 30) {
+  async getUserActivity(
+    sinceHours = 168,
+    take: number | { recent: number; top?: number } = 30,
+  ) {
     const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
-    // Top* lists max out smaller than recent — they're aggregations, not a
-    // feed, so 50 is plenty even at "load more" max.
-    const recentLimit = Math.min(Math.max(take, 1), 200);
-    const topLimit = Math.min(Math.max(take, 15), 50);
+    // Recent feed and the Top* aggregations paginate independently — the FE
+    // only has a Load more on Recent, so growing it shouldn't refetch larger
+    // top lists.
+    const recentRaw = typeof take === 'number' ? take : take.recent;
+    const topRaw = typeof take === 'number' ? take : (take.top ?? 30);
+    const recentLimit = Math.min(Math.max(recentRaw, 1), 200);
+    const topLimit = Math.min(Math.max(topRaw, 15), 50);
 
     // Base filter: skip null users (unauthenticated probes) and admin routes
     const baseWhere: Prisma.RequestLogWhereInput = {

@@ -70,10 +70,14 @@ export class AdminController {
       'What end-users actually do in the app. Aggregates RequestLog over the given window, excluding admin traffic.',
   })
   getUserActivity(@Query() query: QueryMetricsDto) {
-    return this.adminService.getUserActivity(
-      query.sinceHours ?? 168,
-      query.take ?? 30,
-    );
+    const fallback = query.take ?? 30;
+    return this.adminService.getUserActivity(query.sinceHours ?? 168, {
+      // Reuse `slowestTake` as the per-list "recent" pagination param so we
+      // don't add a third one — the activity Recent feed is conceptually the
+      // same shape as metrics' slowest list (latest rows from RequestLog).
+      recent: query.slowestTake ?? fallback,
+      top: query.topRoutesTake ?? fallback,
+    });
   }
 
   @Get(E.WORKSPACES)
