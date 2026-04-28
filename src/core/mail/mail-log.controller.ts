@@ -4,6 +4,7 @@ import {
   Get,
   NotFoundException,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
 } from '@nestjs/common';
@@ -67,7 +68,12 @@ export class MailLogController {
 
   @Get(E.MAIL_LOG_BY_ID)
   @ApiOperation({ summary: 'Get a single mail-log row (Admin)' })
-  async findOne(@Param('id') id: string) {
+  async findOne(
+    // ParseUUIDPipe rejects non-UUID `id` with a 400 instead of letting
+    // route-collision bugs (e.g. a sibling static route registered after
+    // this one) silently 404 with MAIL_LOG_NOT_FOUND.
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ) {
     const row = await this.mailLog.findById(id);
     if (!row) throw new NotFoundException(MSG.ERROR.MAIL_LOG_NOT_FOUND);
     return row;
