@@ -44,6 +44,15 @@ export class MailLogController {
     return this.mail.getConfigStatus();
   }
 
+  @Get(E.MAIL_TEMPLATE_SCHEMA)
+  @ApiOperation({
+    summary:
+      'Template keys + placeholders the FE editor should expose to admins',
+  })
+  async templateSchema() {
+    return this.mail.getTemplateSchema();
+  }
+
   @Get(E.MAIL_LOGS)
   @ApiOperation({ summary: 'List mail send attempts (Admin)' })
   list(@Query() q: MailLogQueryDto) {

@@ -134,6 +134,7 @@ export const ENDPOINTS = {
     MAIL_LOG_CONFIG: 'mail-logs/config-status',
     MAIL_TEST: 'mail-logs/test',
     MAIL_TEMPLATE_TEST: 'mail-logs/template-test',
+    MAIL_TEMPLATE_SCHEMA: 'mail-logs/template-schema',
     USERS_BULK_INVITE: 'users/bulk-invite',
     THROTTLE_OVERRIDES: 'throttle-overrides',
     THROTTLE_OVERRIDE_BY_ID: 'throttle-overrides/:id',

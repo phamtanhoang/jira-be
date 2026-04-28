@@ -11,6 +11,12 @@ import { ENV, MSG, SETTING_KEYS } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { SentryService } from '@/core/services/sentry.service';
 import { MailLogService } from './mail-log.service';
+import {
+  EMAIL_TEMPLATE_KEYS,
+  EMAIL_TEMPLATE_PLACEHOLDERS,
+  type EmailTemplateKey,
+  type EmailTemplateSchema,
+} from './mail-template.schema';
 import { otpEmailTemplate } from './templates/otp-email.template';
 
 export type MailProvider = 'resend' | 'smtp';
@@ -254,8 +260,33 @@ export class MailService {
    * fields when the admin has not configured anything for this template, so
    * callers can fall back to the built-in default.
    */
+  /**
+   * Schema the admin editor uses: list of template keys, placeholders, and
+   * a `previewSample` resolved from the same sources real send-time vars
+   * use (`app.info` + `ENV.TOKEN_VERIFY_EXPIRY`). The FE renders this in
+   * its preview iframe so the admin sees the actual brand name / logo
+   * instead of made-up dummies.
+   */
+  async getTemplateSchema(): Promise<EmailTemplateSchema> {
+    const appInfo = await this.getAppInfo();
+    const expiryMinutes = Math.round(ENV.TOKEN_VERIFY_EXPIRY / 60);
+    return {
+      templates: EMAIL_TEMPLATE_KEYS,
+      placeholders: EMAIL_TEMPLATE_PLACEHOLDERS,
+      previewSample: {
+        appName: appInfo.name ?? '',
+        logoUrl: appInfo.logoUrl ?? '',
+        // OTP + recipient are per-send values; surface a clearly-fake sample
+        // so the admin doesn't mistake the preview for a leaked real code.
+        otp: '123456',
+        expiryMinutes: String(expiryMinutes),
+        recipientEmail: 'you@example.com',
+      },
+    };
+  }
+
   private async getTemplateOverride(
-    name: 'verification' | 'resetPassword' | 'welcome',
+    name: EmailTemplateKey,
   ): Promise<{ subject: string | null; html: string | null }> {
     const setting = await this.prisma.setting.findUnique({
       where: { key: SETTING_KEYS.APP_EMAIL_TEMPLATES },
