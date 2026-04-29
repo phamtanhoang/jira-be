@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Logger,
   Param,
   Patch,
   Post,
@@ -54,6 +55,8 @@ const E = ENDPOINTS.AUTH;
 @ApiTags('Auth')
 @Controller(E.BASE)
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private authService: AuthService,
     private settings: SettingsService,
@@ -288,8 +291,9 @@ export class AuthController {
       // Log the full reason server-side so admins can debug OAuth flow
       // failures instead of having to decode the redirect URL.
       const message = err instanceof Error ? err.message : String(err);
-      console.error(
-        `[auth] OAuth callback failed for ${profile.provider}/${profile.email}: ${message}`,
+      this.logger.error(
+        `OAuth callback failed for ${profile.provider}/${profile.email}: ${message}`,
+        err instanceof Error ? err.stack : undefined,
       );
       const code = message ? encodeURIComponent(message) : 'oauth_failed';
       return res.redirect(`${frontend}/sign-in?error=${code}`);

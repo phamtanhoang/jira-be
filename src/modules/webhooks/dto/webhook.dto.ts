@@ -27,7 +27,7 @@ export class CreateWebhookDto {
   @IsString()
   @MinLength(1)
   @MaxLength(80)
-  name: string;
+  name!: string;
 
   @ApiProperty({
     example: 'https://hooks.slack.com/services/T00/B00/XXX',
@@ -35,7 +35,7 @@ export class CreateWebhookDto {
       'Receiver URL. URLs matching hooks.slack.com are auto-formatted to Slack attachment payloads.',
   })
   @IsUrl({ require_tld: false, require_protocol: true })
-  url: string;
+  url!: string;
 
   @ApiProperty({
     type: [String],
@@ -45,7 +45,7 @@ export class CreateWebhookDto {
   @ArrayMinSize(1)
   @ArrayMaxSize(20)
   @IsString({ each: true })
-  events: string[];
+  events!: string[];
 
   @ApiPropertyOptional()
   @IsOptional()

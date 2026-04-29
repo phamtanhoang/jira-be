@@ -15,7 +15,7 @@ export class BulkInviteDto {
   @ArrayMinSize(1)
   @ArrayMaxSize(500)
   @IsEmail({}, { each: true })
-  emails: string[];
+  emails!: string[];
 
   @ApiPropertyOptional({
     description: 'Optional custom message included in the invitation email',

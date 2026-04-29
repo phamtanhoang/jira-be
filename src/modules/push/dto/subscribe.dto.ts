@@ -7,7 +7,7 @@ export class SubscribePushDto {
       'Web Push API subscription object — pass result of `pushManager.subscribe()` directly.',
   })
   @IsObject()
-  subscription: {
+  subscription!: {
     endpoint: string;
     keys: { p256dh: string; auth: string };
   };
@@ -21,5 +21,5 @@ export class SubscribePushDto {
 export class UnsubscribePushDto {
   @ApiProperty()
   @IsString()
-  endpoint: string;
+  endpoint!: string;
 }

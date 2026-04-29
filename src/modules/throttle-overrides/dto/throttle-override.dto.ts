@@ -24,7 +24,7 @@ export class CreateThrottleOverrideDto {
   @Matches(TARGET_PATTERN, {
     message: 'target must match `user:UUID` or `ip:ADDR`',
   })
-  target: string;
+  target!: string;
 
   @ApiPropertyOptional({
     description:

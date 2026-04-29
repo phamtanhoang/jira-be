@@ -18,17 +18,17 @@ import {
 export class CreateCustomFieldDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
-  projectId: string;
+  projectId!: string;
 
   @ApiProperty({ example: 'Team' })
   @IsString()
   @MinLength(1)
   @MaxLength(60)
-  name: string;
+  name!: string;
 
   @ApiProperty({ enum: CustomFieldType })
   @IsEnum(CustomFieldType)
-  type: CustomFieldType;
+  type!: CustomFieldType;
 
   @ApiPropertyOptional({
     type: [String],

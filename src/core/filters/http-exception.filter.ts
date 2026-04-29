@@ -10,6 +10,7 @@ import {
 import { LogLevel } from '@prisma/client';
 import { Request, Response } from 'express';
 import { MSG } from '@/core/constants';
+import { BaseAppException } from '@/core/exceptions';
 import { SentryService } from '@/core/services/sentry.service';
 import { AuthUser } from '@/core/types';
 import {
@@ -56,12 +57,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? message
         : ((message as { message?: string | string[] }).message ?? message);
 
+    // Surface a stable machine-readable code so the FE can branch without
+    // parsing the (i18n) message string. Only present on domain exceptions.
+    const errorCode =
+      exception instanceof BaseAppException ? exception.errorCode : undefined;
+
     // Fire-and-forget logging — must never affect the response
     this.safeLog(request, status, exception);
 
     response.status(status).json({
       statusCode: status,
       message: errorMessage,
+      ...(errorCode ? { errorCode } : {}),
       timestamp: convertDateToTimezone(new Date(), timezone),
     });
   }

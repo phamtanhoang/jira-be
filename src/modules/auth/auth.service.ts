@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -37,6 +38,8 @@ import {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
@@ -225,8 +228,8 @@ export class AuthService {
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(
-          `[auth] failed to record OAuthAccount for ${user.id} (${profile.provider}): ${msg}. Continuing login. Run "prisma migrate deploy" to fix.`,
+        this.logger.warn(
+          `Failed to record OAuthAccount for ${user.id} (${profile.provider}): ${msg}. Continuing login. Run "prisma migrate deploy" to fix.`,
         );
       }
     }

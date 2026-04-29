@@ -599,45 +599,49 @@ export class IssuesService {
 
   async move(issueId: string, userId: string, dto: MoveIssueDto) {
     const issue = await this.findById(issueId, userId);
-
-    const column = await this.prisma.boardColumn.findUnique({
-      where: { id: dto.columnId },
-    });
-    if (!column) throw new NotFoundException(MSG.ERROR.COLUMN_NOT_FOUND);
-
     const oldColumnId = issue.boardColumnId;
+    const isTransition = oldColumnId !== dto.columnId;
 
-    const updated = await this.prisma.issue.update({
-      where: { id: issueId },
-      data: {
-        boardColumnId: dto.columnId,
-        position: dto.position ?? 0,
-        completedAt:
-          column.category === StatusCategory.DONE ? new Date() : null,
-      },
-      include: withUserMeta(ISSUE_INCLUDE, userId),
+    // Read both columns in one round-trip — they're independent lookups.
+    const [newColumn, oldColumn] = await Promise.all([
+      this.prisma.boardColumn.findUnique({ where: { id: dto.columnId } }),
+      oldColumnId && isTransition
+        ? this.prisma.boardColumn.findUnique({ where: { id: oldColumnId } })
+        : Promise.resolve(null),
+    ]);
+    if (!newColumn) throw new NotFoundException(MSG.ERROR.COLUMN_NOT_FOUND);
+
+    // Atomic: issue.update + activity.create commit together so a column
+    // move never leaves an orphan activity row (or vice versa).
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.issue.update({
+        where: { id: issueId },
+        data: {
+          boardColumnId: dto.columnId,
+          position: dto.position ?? 0,
+          completedAt:
+            newColumn.category === StatusCategory.DONE ? new Date() : null,
+        },
+        include: withUserMeta(ISSUE_INCLUDE, userId),
+      });
+      if (isTransition) {
+        await tx.activity.create({
+          data: {
+            issueId,
+            userId,
+            action: ActivityAction.TRANSITIONED,
+            field: 'status',
+            oldValue: oldColumn?.name ?? null,
+            newValue: newColumn.name,
+          },
+        });
+      }
+      return result;
     });
 
-    // Log transition
-    if (oldColumnId !== dto.columnId) {
-      const oldColumn = oldColumnId
-        ? await this.prisma.boardColumn.findUnique({
-            where: { id: oldColumnId },
-          })
-        : null;
-
-      await this.prisma.activity.create({
-        data: {
-          issueId,
-          userId,
-          action: ActivityAction.TRANSITIONED,
-          field: 'status',
-          oldValue: oldColumn?.name ?? null,
-          newValue: column.name,
-        },
-      });
-
-      // Notify reporter + watchers on column change. Skip the mover.
+    // Notification fanout runs after the atomic write so a notification
+    // failure can't roll back the move.
+    if (isTransition) {
       const watcherRows = await this.prisma.issueWatcher.findMany({
         where: { issueId },
         select: { userId: true },
@@ -648,7 +652,7 @@ export class IssuesService {
       ].filter((id): id is string => !!id && id !== userId);
       this.notifications.createMany(recipients, {
         type: 'ISSUE_TRANSITIONED',
-        title: `${updated.key} moved to ${column.name}`,
+        title: `${updated.key} moved to ${newColumn.name}`,
         body: updated.summary,
         link: `/issues/${updated.key}`,
       });

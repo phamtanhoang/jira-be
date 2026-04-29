@@ -13,7 +13,7 @@ export class BulkUpdateIssueDto {
   @IsArray()
   @IsString({ each: true })
   @ArrayMinSize(1)
-  issueIds: string[];
+  issueIds!: string[];
 
   @ApiPropertyOptional()
   @IsString()
@@ -36,5 +36,5 @@ export class BulkDeleteIssueDto {
   @IsArray()
   @IsString({ each: true })
   @ArrayMinSize(1)
-  issueIds: string[];
+  issueIds!: string[];
 }

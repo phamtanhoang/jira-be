@@ -15,7 +15,7 @@ export class CreatePatDto {
   @IsString()
   @MinLength(1)
   @MaxLength(60)
-  name: string;
+  name!: string;
 
   @ApiPropertyOptional({
     description: 'Days until the token expires. 0 / omitted = never expires.',

@@ -1,5 +1,8 @@
+import { Logger } from '@nestjs/common';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { ENV } from '@/core/constants';
+
+const logger = new Logger('Storage');
 
 let _supabase: SupabaseClient | null = null;
 
@@ -36,7 +39,7 @@ export async function uploadFile(
   });
 
   if (error) {
-    console.error('Supabase upload error:', error);
+    logger.error(`Supabase upload error: ${error.message}`, error.stack);
     throw new Error(`Upload failed: ${error.message}`);
   }
 
@@ -55,7 +58,8 @@ export async function deleteFile(publicUrl: string): Promise<void> {
   if (!path) return;
 
   const { error } = await supabase.storage.from(bucket).remove([path]);
-  if (error) console.error('Supabase delete error:', error);
+  if (error)
+    logger.error(`Supabase delete error: ${error.message}`, error.stack);
 }
 
 /**
@@ -80,7 +84,10 @@ export async function createSignedUrl(
     .createSignedUrl(path, expiresInSec);
 
   if (error || !data) {
-    console.error('Supabase signed URL error:', error);
+    logger.error(
+      `Supabase signed URL error: ${error?.message ?? 'no data returned'}`,
+      error?.stack,
+    );
     return null;
   }
   return data.signedUrl;
