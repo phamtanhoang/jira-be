@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { ENV } from '@/core/constants';
+import { DAY_MS, ENV } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { MailService } from '@/core/mail/mail.service';
 
@@ -28,7 +28,7 @@ export class DigestService {
   async runDailyDigest() {
     if (ENV.IS_TEST) return; // never run during unit tests
 
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const since = new Date(Date.now() - DAY_MS);
 
     // Collect unread, undigested notifications from the last 24h, grouped by
     // user. We rely on (userId, readAt) index — see notification.prisma.
@@ -81,7 +81,7 @@ export class DigestService {
         userId,
         readAt: null,
         digestSentAt: null,
-        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        createdAt: { gte: new Date(Date.now() - DAY_MS) },
       },
       orderBy: { createdAt: 'desc' },
       take: 50,

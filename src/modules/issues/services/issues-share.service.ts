@@ -1,12 +1,11 @@
-import {
-  Inject,
-  Injectable,
-  NotFoundException,
-  forwardRef,
-} from '@nestjs/common';
-import { BOARD_COLUMN_SELECT, MSG, USER_SELECT_BASIC } from '@/core/constants';
+import { Inject, Injectable, forwardRef } from '@nestjs/common';
+import { BOARD_COLUMN_SELECT, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import { IssueNotFoundException } from '@/core/exceptions';
+import {
+  IssueNotFoundException,
+  ShareTokenExpiredException,
+  ShareTokenNotFoundException,
+} from '@/core/exceptions';
 import { generateShareToken } from '@/core/utils';
 import { IssuesService } from '../issues.service';
 
@@ -52,7 +51,7 @@ export class IssuesShareService {
       where: { id: tokenId },
     });
     if (!tok || tok.issueId !== issueId) {
-      throw new NotFoundException(MSG.ERROR.SHARE_TOKEN_NOT_FOUND);
+      throw new ShareTokenNotFoundException();
     }
     await this.prisma.issueShareToken.delete({ where: { id: tokenId } });
   }
@@ -66,9 +65,9 @@ export class IssuesShareService {
     const tok = await this.prisma.issueShareToken.findUnique({
       where: { token },
     });
-    if (!tok) throw new NotFoundException(MSG.ERROR.SHARE_TOKEN_NOT_FOUND);
+    if (!tok) throw new ShareTokenNotFoundException();
     if (tok.expiresAt && tok.expiresAt < new Date()) {
-      throw new NotFoundException(MSG.ERROR.SHARE_TOKEN_EXPIRED);
+      throw new ShareTokenExpiredException();
     }
 
     const issue = await this.prisma.issue.findUnique({

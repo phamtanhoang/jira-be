@@ -5,10 +5,18 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { ENV, MSG } from '@/core/constants';
+import { DAY_MS, ENV, GRACE_PERIOD_DAYS, MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 
-const GRACE_DAYS = 30;
+const GRACE_DAYS = GRACE_PERIOD_DAYS;
+
+/**
+ * Hard cap on rows per export bucket. A user with 100k+ comments / activity
+ * could OOM the Node process while serializing JSON. 10k rows × ~200 bytes
+ * each ≈ 2 MB per bucket, manageable in memory. If we ever need more, switch
+ * to streaming NDJSON.
+ */
+const EXPORT_TAKE_LIMIT = 10_000;
 
 /**
  * GDPR — user-initiated data export + account deletion.
@@ -66,6 +74,8 @@ export class GdprService {
           type: true,
           createdAt: true,
         },
+        orderBy: { createdAt: 'desc' },
+        take: EXPORT_TAKE_LIMIT,
       }),
       this.prisma.issue.findMany({
         where: { assigneeId: userId },
@@ -76,10 +86,14 @@ export class GdprService {
           type: true,
           createdAt: true,
         },
+        orderBy: { createdAt: 'desc' },
+        take: EXPORT_TAKE_LIMIT,
       }),
       this.prisma.comment.findMany({
         where: { authorId: userId },
         select: { id: true, issueId: true, content: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: EXPORT_TAKE_LIMIT,
       }),
       this.prisma.worklog.findMany({
         where: { userId },
@@ -91,6 +105,8 @@ export class GdprService {
           description: true,
           createdAt: true,
         },
+        orderBy: { createdAt: 'desc' },
+        take: EXPORT_TAKE_LIMIT,
       }),
       this.prisma.attachment.findMany({
         where: { uploadedById: userId },
@@ -102,14 +118,20 @@ export class GdprService {
           mimeType: true,
           createdAt: true,
         },
+        orderBy: { createdAt: 'desc' },
+        take: EXPORT_TAKE_LIMIT,
       }),
       this.prisma.issueStar.findMany({
         where: { userId },
         select: { issueId: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: EXPORT_TAKE_LIMIT,
       }),
       this.prisma.issueWatcher.findMany({
         where: { userId },
         select: { issueId: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: EXPORT_TAKE_LIMIT,
       }),
       this.prisma.notificationPreference.findMany({
         where: { userId },
@@ -226,5 +248,5 @@ export class GdprService {
 }
 
 function addDays(d: Date, days: number): Date {
-  return new Date(d.getTime() + days * 24 * 60 * 60 * 1000);
+  return new Date(d.getTime() + days * DAY_MS);
 }

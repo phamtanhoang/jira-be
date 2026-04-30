@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { BOARD_COLUMN_SELECT, MSG, USER_SELECT_FULL } from '@/core/constants';
+import { Injectable } from '@nestjs/common';
+import { BOARD_COLUMN_SELECT, USER_SELECT_FULL } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { ProjectNotFoundException } from '@/core/exceptions';
 import { csvEscape } from '@/core/utils';
 import { ProjectsService } from '@/modules/projects/projects.service';
 
@@ -18,7 +19,7 @@ export class IssuesExportService {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
     });
-    if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
+    if (!project) throw new ProjectNotFoundException();
 
     await this.projectsService.assertProjectAccess(
       project.id,

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AdminHealthService } from './admin-health.service';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { UserProfileController } from './profile.controller';
@@ -7,8 +8,8 @@ import { UsersService } from './users.service';
 
 @Module({
   controllers: [UsersController, AdminController, UserProfileController],
-  providers: [UsersService, AdminService],
-  // Exported so HealthModule can reuse AdminService.getPublicHealth().
+  providers: [UsersService, AdminService, AdminHealthService],
+  // AdminService façade re-exported for HealthModule (getPublicHealth).
   exports: [AdminService],
 })
 export class UsersModule {}

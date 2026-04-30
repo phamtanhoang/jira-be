@@ -1,14 +1,11 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Inject,
-  Injectable,
-  NotFoundException,
-  forwardRef,
-} from '@nestjs/common';
+import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { IssueLinkType, Prisma } from '@prisma/client';
-import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import {
+  IssueLinkConflictException,
+  IssueLinkNotFoundException,
+  IssueLinkSelfException,
+} from '@/core/exceptions';
 import { IssuesService } from '../issues.service';
 import { ISSUE_LINK_PEER_SELECT } from '../issues.shared';
 
@@ -26,7 +23,7 @@ export class IssuesLinksService {
     dto: { targetIssueId: string; type: IssueLinkType },
   ) {
     if (sourceIssueId === dto.targetIssueId) {
-      throw new BadRequestException(MSG.ERROR.ISSUE_LINK_SELF);
+      throw new IssueLinkSelfException();
     }
     // Both ends must exist + caller must have access to BOTH (linking across
     // projects you can't see leaks issue keys/summaries).
@@ -47,7 +44,7 @@ export class IssuesLinksService {
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === 'P2002'
       ) {
-        throw new ConflictException(MSG.ERROR.ISSUE_LINK_EXISTS);
+        throw new IssueLinkConflictException();
       }
       throw err;
     }
@@ -58,10 +55,10 @@ export class IssuesLinksService {
     const link = await this.prisma.issueLink.findUnique({
       where: { id: linkId },
     });
-    if (!link) throw new NotFoundException(MSG.ERROR.ISSUE_LINK_NOT_FOUND);
+    if (!link) throw new IssueLinkNotFoundException();
     // Allow deletion from either end of the link — both sides see it.
     if (link.sourceIssueId !== issueId && link.targetIssueId !== issueId) {
-      throw new NotFoundException(MSG.ERROR.ISSUE_LINK_NOT_FOUND);
+      throw new IssueLinkNotFoundException();
     }
     await this.prisma.issueLink.delete({ where: { id: linkId } });
   }

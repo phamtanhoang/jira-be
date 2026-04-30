@@ -1,5 +1,45 @@
+# ─── Build artefacts (rebuilt inside the image) ──────────────────────────
 node_modules
 dist
+coverage
+*.tsbuildinfo
+
+# ─── Local-only state ─────────────────────────────────────────────────────
 .git
+.gitignore
+.gitattributes
+.github
+
+# Secrets — NEVER ship into a layer
 .env
+.env.*
+!.env.example
+
+# Editor / IDE
+.vscode
+.idea
+.kiro
+.claude
+*.swp
+*.swo
+
+# Test / CI scratch
+test-results
+playwright-report
+.husky
+eslint-out.json
+
+# Local file uploads (Supabase mirrors them; not for image)
 uploads
+
+# Docs
+README.md
+ARCHITECTURE.md
+CONTRIBUTING.md
+SECURITY.md
+CHANGELOG.md
+LICENSE
+
+# OS junk
+.DS_Store
+Thumbs.db

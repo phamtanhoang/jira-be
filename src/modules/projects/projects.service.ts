@@ -11,6 +11,7 @@ import { PrismaService } from '@/core/database/prisma.service';
 import {
   InsufficientPermissionsException,
   ProjectAccessDeniedException,
+  ProjectNotFoundException,
   QuotaExceededException,
 } from '@/core/exceptions';
 import { assertProjectAccess } from '@/core/utils';
@@ -115,7 +116,7 @@ export class ProjectsService {
   async findById(projectId: string, userId: string) {
     const project =
       await this.projectsRepository.findByIdWithMembers(projectId);
-    if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
+    if (!project) throw new ProjectNotFoundException();
 
     await this.assertProjectAccess(project.id, userId, project.workspaceId);
 
@@ -138,7 +139,7 @@ export class ProjectsService {
         where: { id: projectId },
         select: { workspaceId: true },
       });
-      if (!p) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
+      if (!p) throw new ProjectNotFoundException();
       wsId = p.workspaceId;
     }
     await assertProjectAccess(this.prisma, wsId, projectId, userId);

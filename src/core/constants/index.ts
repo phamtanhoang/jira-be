@@ -4,5 +4,6 @@ export * from './env.constant';
 export * from './message.constant';
 export * from './prisma-selects.constant';
 export * from './settings.constant';
+export * from './time.constant';
 export * from './upload.constant';
 export * from './validation.constant';

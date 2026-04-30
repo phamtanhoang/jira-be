@@ -1,15 +1,31 @@
-# Jira Clone - Backend API
+# Jira Clone — Backend API
+
+[![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
+[![NestJS](https://img.shields.io/badge/NestJS-11-E0234E)](https://nestjs.com)
+[![Prisma](https://img.shields.io/badge/Prisma-7-2D3748)](https://www.prisma.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6)](https://www.typescriptlang.org)
 
 NestJS backend for a Jira-like project management tool.
 
+📚 **[Interactive API Docs (Swagger UI)](http://localhost:3031/api)** — auto-generated from `@ApiTags` / `@ApiOperation` decorators. Try every endpoint with the cookie auth populated by your sign-in flow.
+
+📐 **[ARCHITECTURE.md](./ARCHITECTURE.md)** — module dependency graph, façade rationale, cache tag matrix, request lifecycle.
+🤝 **[CONTRIBUTING.md](./CONTRIBUTING.md)** — quick start + PR checklist + conventions.
+🔒 **[SECURITY.md](./SECURITY.md)** — responsible disclosure policy.
+📝 **[CHANGELOG.md](../CHANGELOG.md)** — recent changes grouped by phase.
+
 ## Tech Stack
 
-- **Runtime:** Node.js + TypeScript
-- **Framework:** NestJS
-- **Database:** PostgreSQL (Neon) + Prisma ORM
-- **Auth:** JWT + Passport (httpOnly cookies)
+- **Runtime:** Node.js ≥20 + TypeScript 5 (strict mode)
+- **Framework:** NestJS 11
+- **Database:** PostgreSQL (Neon, Supabase, or local Docker) + Prisma 7 ORM
+- **Auth:** JWT + Passport — httpOnly cookies, OAuth (Google, GitHub), Personal Access Tokens
 - **Email:** Resend
+- **Storage:** Supabase Storage
+- **Cache:** Redis (optional, in-memory fallback)
 - **Docs:** Swagger (auto-generated)
+- **Observability:** Sentry (5xx only, prod only) + RequestLog table
 
 ## Project Structure
 

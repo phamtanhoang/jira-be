@@ -5,6 +5,15 @@ import { PrismaService } from '@/core/database/prisma.service';
 import { IssuesRepository } from '../issues.repository';
 import { IssuesService } from '../issues.service';
 
+const DEFAULT_TAKE = 20;
+const MAX_TAKE = 100;
+
+function clampTake(raw: number | undefined): number {
+  if (!raw || raw < 1) return DEFAULT_TAKE;
+  if (raw > MAX_TAKE) return MAX_TAKE;
+  return Math.floor(raw);
+}
+
 @Injectable()
 export class IssuesActivityService {
   constructor(
@@ -15,25 +24,45 @@ export class IssuesActivityService {
     private issuesService: IssuesService,
   ) {}
 
-  async findActivity(issueId: string, userId: string) {
+  async findActivity(
+    issueId: string,
+    userId: string,
+    opts?: { cursor?: string; take?: number },
+  ) {
     // Activity feed is read every modal open. Access check must run on every
     // call (workspace/project membership) — wrap only the heavy data load.
     await this.issuesService.findById(issueId, userId);
 
-    return this.cacheTags.wrap(
-      `issue:activity:${issueId}`,
-      [`issue:id:${issueId}`],
-      () => this.loadActivity(issueId),
-    );
+    const take = clampTake(opts?.take);
+    const cursor = opts?.cursor;
+
+    // Cache only the unparameterized first page. Paged requests skip cache
+    // because the matrix of (cursor × take) blows up tag invalidation.
+    if (!cursor && take === DEFAULT_TAKE) {
+      return this.cacheTags.wrap(
+        `issue:activity:${issueId}`,
+        [`issue:id:${issueId}`],
+        () => this.loadActivity(issueId, { take }),
+      );
+    }
+    return this.loadActivity(issueId, { cursor, take });
   }
 
-  private async loadActivity(issueId: string) {
+  private async loadActivity(
+    issueId: string,
+    { cursor, take }: { cursor?: string; take: number },
+  ) {
+    // Fetch one extra row to determine `hasMore` without a separate count.
     const rows = await this.prisma.activity.findMany({
       where: { issueId },
       include: { user: USER_SELECT_BASIC },
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take: take + 1,
+      ...(cursor && { cursor: { id: cursor }, skip: 1 }),
     });
+    const hasMore = rows.length > take;
+    const sliced = hasMore ? rows.slice(0, take) : rows;
+    const nextCursor = hasMore ? sliced[sliced.length - 1].id : null;
 
     // Field → kind of entity referenced by oldValue/newValue. We resolve these
     // lazily so the activity feed can show "Alice" instead of a raw UUID even
@@ -46,7 +75,7 @@ export class IssuesActivityService {
     const sprintIds = new Set<string>();
     const issueIds = new Set<string>();
 
-    for (const r of rows) {
+    for (const r of sliced) {
       const field = r.field ?? '';
       for (const v of [r.oldValue, r.newValue]) {
         if (!v) continue;
@@ -75,10 +104,12 @@ export class IssuesActivityService {
       return value;
     }
 
-    return rows.map((r) => ({
+    const data = sliced.map((r) => ({
       ...r,
       oldValueDisplay: resolve(r.field, r.oldValue),
       newValueDisplay: resolve(r.field, r.newValue),
     }));
+
+    return { data, nextCursor, hasMore };
   }
 }

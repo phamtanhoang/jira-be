@@ -1,11 +1,17 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { LogLevel, Prisma } from '@prisma/client';
-import type { Cache } from 'cache-manager';
-import { ENV, MSG, USER_SELECT_BASIC } from '@/core/constants';
+import {
+  DAY_MS,
+  ENV,
+  HOUR_MS,
+  MSG,
+  USER_SELECT_BASIC,
+  WEEK_MS,
+} from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { MailService } from '@/core/mail/mail.service';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
+import { AdminHealthService } from './admin-health.service';
 import { QueryAdminWorkspacesDto } from './dto';
 
 type LogLevelCounts = Record<LogLevel, number>;
@@ -41,13 +47,25 @@ export class AdminService {
     private prisma: PrismaService,
     private audit: AdminAuditService,
     private mail: MailService,
-    @Inject(CACHE_MANAGER) private cache: Cache,
+    private health: AdminHealthService,
   ) {}
+
+  // ─── Health (delegated) ──────────────────────────────────
+  // Kept on the façade for back-compat with HealthController + AdminController.
+  // Implementation lives in AdminHealthService for narrower testing/mocking.
+
+  getHealth() {
+    return this.health.getHealth();
+  }
+
+  getPublicHealth() {
+    return this.health.getPublicHealth();
+  }
 
   async getStats() {
     const now = new Date();
-    const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const since7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const since24h = new Date(now.getTime() - DAY_MS);
+    const since7d = new Date(now.getTime() - WEEK_MS);
 
     const [
       usersTotal,
@@ -152,7 +170,7 @@ export class AdminService {
     const days = Math.max(1, Math.ceil(sinceHours / 24));
     // Start of "today - (days-1)" so e.g. days=14 returns 14 buckets up to
     // today.
-    const since = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+    const since = new Date(now.getTime() - (days - 1) * DAY_MS);
     since.setUTCHours(0, 0, 0, 0);
 
     const [
@@ -226,7 +244,7 @@ export class AdminService {
 
     const bucketKeys: string[] = [];
     for (let i = 0; i < days; i++) {
-      const d = new Date(since.getTime() + i * 24 * 60 * 60 * 1000);
+      const d = new Date(since.getTime() + i * DAY_MS);
       bucketKeys.push(d.toISOString().slice(0, 10));
     }
 
@@ -279,7 +297,7 @@ export class AdminService {
     sinceHours = 24,
     take: number | { topRoutes: number; slowest: number } = 10,
   ) {
-    const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
+    const since = new Date(Date.now() - sinceHours * HOUR_MS);
     // Each list paginates independently. Clamp per-list so neither one can
     // blow up the request.
     const clamp = (n: number) => Math.min(Math.max(n, 1), 100);
@@ -378,7 +396,7 @@ export class AdminService {
     sinceHours = 168,
     take: number | { recent: number; top?: number } = 30,
   ) {
-    const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
+    const since = new Date(Date.now() - sinceHours * HOUR_MS);
     // Recent feed and the Top* aggregations paginate independently — the FE
     // only has a Load more on Recent, so growing it shouldn't refetch larger
     // top lists.
@@ -533,155 +551,7 @@ export class AdminService {
     return { message: MSG.SUCCESS.WORKSPACE_DELETED };
   }
 
-  // System health probe — surfaces wiring status of external dependencies +
-  // process metrics so admins can spot a degraded service before users do.
-  // Each probe wraps in try/catch so one failure doesn't fail the whole call.
-  async getHealth() {
-    const startedAt = Date.now();
-
-    const dbProbe = async (): Promise<{
-      ok: boolean;
-      latencyMs: number;
-      error?: string;
-    }> => {
-      const t = Date.now();
-      try {
-        await this.prisma.$queryRaw`SELECT 1`;
-        return { ok: true, latencyMs: Date.now() - t };
-      } catch (err) {
-        return { ok: false, latencyMs: Date.now() - t, error: String(err) };
-      }
-    };
-
-    const supabaseProbe = async (): Promise<{
-      configured: boolean;
-      ok: boolean;
-      error?: string;
-    }> => {
-      if (!ENV.SUPABASE_URL || !ENV.SUPABASE_SERVICE_KEY) {
-        return { configured: false, ok: false };
-      }
-      try {
-        const res = await fetch(`${ENV.SUPABASE_URL}/auth/v1/health`, {
-          headers: { apikey: ENV.SUPABASE_SERVICE_KEY },
-          signal: AbortSignal.timeout(3000),
-        });
-        return { configured: true, ok: res.ok };
-      } catch (err) {
-        return { configured: true, ok: false, error: String(err) };
-      }
-    };
-
-    const cacheProbe = async (): Promise<{
-      configured: boolean;
-      ok: boolean;
-      latencyMs: number;
-      mode: 'redis' | 'memory' | 'disabled';
-      error?: string;
-    }> => {
-      const t = Date.now();
-      if (ENV.CACHE_DISABLED) {
-        return { configured: false, ok: true, latencyMs: 0, mode: 'disabled' };
-      }
-      const mode: 'redis' | 'memory' = ENV.REDIS_URL ? 'redis' : 'memory';
-      try {
-        const probeKey = '__health_probe__';
-        await this.cache.set(probeKey, '1', 1000);
-        const v = await this.cache.get<string>(probeKey);
-        await this.cache.del(probeKey);
-        return {
-          configured: true,
-          ok: v === '1',
-          latencyMs: Date.now() - t,
-          mode,
-        };
-      } catch (err) {
-        return {
-          configured: true,
-          ok: false,
-          latencyMs: Date.now() - t,
-          mode,
-          error: String(err),
-        };
-      }
-    };
-
-    const [db, supabase, cache] = await Promise.all([
-      dbProbe(),
-      supabaseProbe(),
-      cacheProbe(),
-    ]);
-
-    const mem = process.memoryUsage();
-    const memoryMB = Math.round((mem.rss / 1024 / 1024) * 10) / 10;
-
-    return {
-      checkedAt: new Date().toISOString(),
-      checkDurationMs: Date.now() - startedAt,
-      db,
-      // Resend has no cheap public health endpoint — report config-only state.
-      mail: {
-        configured: !!ENV.RESEND_API_KEY,
-        from: ENV.MAIL_FROM || null,
-      },
-      supabase,
-      cache,
-      sentry: {
-        configured: !!ENV.SENTRY_DSN,
-        active: !!ENV.SENTRY_DSN && ENV.IS_PRODUCTION,
-      },
-      runtime: {
-        nodeVersion: process.version,
-        uptimeSec: Math.round(process.uptime()),
-        memoryMB,
-        env: ENV.NODE_ENV,
-      },
-    };
-  }
-
-  /**
-   * Lightweight public health check for external uptime monitors. Doesn't
-   * leak secrets, runtime details, or auth-required data — just enough to
-   * say "service is alive".
-   *
-   * Status semantics:
-   * - "ok"        — DB reachable; if cache is configured it must also be ok.
-   * - "degraded"  — DB ok, cache configured but failing (still serving traffic).
-   * - "down"      — DB unreachable. Caller treats as failure.
-   */
-  async getPublicHealth(): Promise<{
-    status: 'ok' | 'degraded' | 'down';
-    timestamp: string;
-    uptimeSec: number;
-    db: 'ok' | 'down';
-    cache: 'ok' | 'down' | 'disabled';
-  }> {
-    const dbOk = await this.prisma.$queryRaw`SELECT 1`
-      .then(() => true)
-      .catch(() => false);
-
-    let cacheStatus: 'ok' | 'down' | 'disabled' = 'disabled';
-    if (!ENV.CACHE_DISABLED) {
-      cacheStatus = await this.cache
-        .set('__health_probe_pub__', '1', 1000)
-        .then(() => 'ok' as const)
-        .catch(() => 'down' as const);
-    }
-
-    const status: 'ok' | 'degraded' | 'down' = !dbOk
-      ? 'down'
-      : cacheStatus === 'down'
-        ? 'degraded'
-        : 'ok';
-
-    return {
-      status,
-      timestamp: new Date().toISOString(),
-      uptimeSec: Math.round(process.uptime()),
-      db: dbOk ? 'ok' : 'down',
-      cache: cacheStatus,
-    };
-  }
+  // ─── Workspace detail (admin-only) ───────────────────────
 
   // Detail view of a single workspace for /admin/workspaces/:id. Bundles
   // counts + recent activity so the FE doesn't need to chain 5 calls.

@@ -33,7 +33,12 @@ async function bootstrap() {
   );
   app.use(cookieParser());
   app.enableCors({
-    origin: ENV.CORS_ORIGIN.split(','),
+    // Trim whitespace around comma-separated entries — admins occasionally
+    // paste `"http://a, http://b"` (with a space) and the leading space
+    // breaks the origin match silently.
+    origin: ENV.CORS_ORIGIN.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-timezone', 'x-origin'],
@@ -59,11 +64,16 @@ async function bootstrap() {
     .addCookieAuth('access_token')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api', app, document);
+  // `setup('api', ...)` mounts both the UI at `/api` and the raw spec at
+  // `/api-json` (default). FE codegen pulls from `/api-json`.
+  SwaggerModule.setup('api', app, document, {
+    jsonDocumentUrl: 'api-json',
+  });
 
   const port = ENV.PORT;
   await app.listen(port);
   logger.log(`Server running on http://localhost:${port}`);
-  logger.log(`Swagger docs: http://localhost:${port}/api`);
+  logger.log(`Swagger UI:    http://localhost:${port}/api`);
+  logger.log(`OpenAPI spec:  http://localhost:${port}/api-json`);
 }
 void bootstrap();

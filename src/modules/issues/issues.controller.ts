@@ -205,9 +205,20 @@ export class IssuesController {
   // Opening / closing an issue modal re-fetches activity. Skip throttle
   // — workspace membership check is enough.
   @SkipThrottle()
-  @ApiOperation({ summary: 'Get activity log for issue' })
-  findActivity(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.issuesService.findActivity(id, user.id);
+  @ApiOperation({
+    summary:
+      'Get activity log for issue. Cursor-based pagination — pass `cursor` of the last seen row + `take` (default 20, max 100).',
+  })
+  findActivity(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Query('cursor') cursor?: string,
+    @Query('take') take?: string,
+  ) {
+    return this.issuesService.findActivity(id, user.id, {
+      cursor,
+      take: take ? parseInt(take, 10) : undefined,
+    });
   }
 
   @Get(E.BY_ID)

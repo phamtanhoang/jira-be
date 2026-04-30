@@ -6,3 +6,14 @@ services:
     env_file: .env
     ports:
       - "3031:3031"
+    # Liveness probe — hits the public /health endpoint (no auth, no
+    # throttle). Marks the container "unhealthy" after 3 consecutive
+    # failures so docker / orchestrator can restart it.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "wget -qO- http://localhost:3031/health > /dev/null || exit 1"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

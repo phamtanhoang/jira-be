@@ -1,10 +1,13 @@
 {
   "name": "jira-be",
   "version": "0.0.1",
-  "description": "",
+  "description": "Jira Clone backend — NestJS + Prisma + PostgreSQL",
   "author": "",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "build": "nest build && tsc-alias",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -18,7 +21,17 @@
     "test": "jest --config ./test/jest-unit.json --watch",
     "test:run": "jest --config ./test/jest-unit.json",
     "test:cov": "jest --config ./test/jest-unit.json --coverage",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "@nestjs/cache-manager": "^3.1.2",

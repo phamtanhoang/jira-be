@@ -2,6 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ProjectType, StatusCategory } from '@prisma/client';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import {
+  ColumnNotFoundException,
+  ProjectNotFoundException,
+} from '@/core/exceptions';
 import { assertProjectAccess } from '@/core/utils';
 import { CreateColumnDto, UpdateColumnDto, ReorderColumnsDto } from './dto';
 
@@ -35,7 +39,7 @@ export class BoardsService {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
     });
-    if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
+    if (!project) throw new ProjectNotFoundException();
 
     await assertProjectAccess(
       this.prisma,
@@ -97,7 +101,7 @@ export class BoardsService {
       where: { id: columnId },
     });
     if (!column || column.boardId !== boardId) {
-      throw new NotFoundException(MSG.ERROR.COLUMN_NOT_FOUND);
+      throw new ColumnNotFoundException();
     }
 
     return this.prisma.boardColumn.update({
@@ -117,7 +121,7 @@ export class BoardsService {
       where: { id: columnId },
     });
     if (!column || column.boardId !== boardId) {
-      throw new NotFoundException(MSG.ERROR.COLUMN_NOT_FOUND);
+      throw new ColumnNotFoundException();
     }
 
     return this.prisma.boardColumn.delete({ where: { id: columnId } });

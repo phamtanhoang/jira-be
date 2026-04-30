@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# Block commits that fail lint or have unfixable type errors. Lint-staged
+# auto-fixes formatting + import order; type-check runs against the whole
+# project (incremental — fast on a warm `.tsbuildinfo`).
+
+npx lint-staged && npx tsc --noEmit

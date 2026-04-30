@@ -1,9 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  NotFoundException,
-  forwardRef,
-} from '@nestjs/common';
+import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import {
   ActivityAction,
   IssueLinkType,
@@ -14,9 +9,12 @@ import {
   WorkspaceRole,
 } from '@prisma/client';
 import { CacheTagsService } from '@/core/cache/cache-tags.service';
-import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import { IssueNotFoundException } from '@/core/exceptions';
+import {
+  ColumnNotFoundException,
+  IssueNotFoundException,
+  ProjectNotFoundException,
+} from '@/core/exceptions';
 import { newMentions, sanitizeRichHtml } from '@/core/utils';
 import { CustomFieldsService } from '@/modules/custom-fields/custom-fields.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
@@ -83,7 +81,7 @@ export class IssuesService {
         },
       },
     });
-    if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
+    if (!project) throw new ProjectNotFoundException();
 
     await this.projectsService.assertProjectAccess(
       project.id,
@@ -187,7 +185,7 @@ export class IssuesService {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
     });
-    if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
+    if (!project) throw new ProjectNotFoundException();
 
     await this.projectsService.assertProjectAccess(
       project.id,
@@ -510,7 +508,7 @@ export class IssuesService {
         ? this.prisma.boardColumn.findUnique({ where: { id: oldColumnId } })
         : Promise.resolve(null),
     ]);
-    if (!newColumn) throw new NotFoundException(MSG.ERROR.COLUMN_NOT_FOUND);
+    if (!newColumn) throw new ColumnNotFoundException();
 
     // Atomic: issue.update + activity.create commit together so a column
     // move never leaves an orphan activity row (or vice versa).
@@ -752,7 +750,11 @@ export class IssuesService {
     return this.exportService.exportCsv(projectId, userId);
   }
 
-  findActivity(issueId: string, userId: string) {
-    return this.activityService.findActivity(issueId, userId);
+  findActivity(
+    issueId: string,
+    userId: string,
+    opts?: { cursor?: string; take?: number },
+  ) {
+    return this.activityService.findActivity(issueId, userId, opts);
   }
 }

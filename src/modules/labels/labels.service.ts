@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { ProjectNotFoundException } from '@/core/exceptions';
 import { assertProjectAccess } from '@/core/utils';
 import { CreateLabelDto } from './dto';
 
@@ -16,7 +17,7 @@ export class LabelsService {
     const project = await this.prisma.project.findUnique({
       where: { id: dto.projectId },
     });
-    if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
+    if (!project) throw new ProjectNotFoundException();
 
     await assertProjectAccess(
       this.prisma,
@@ -39,7 +40,7 @@ export class LabelsService {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
     });
-    if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
+    if (!project) throw new ProjectNotFoundException();
 
     await assertProjectAccess(
       this.prisma,

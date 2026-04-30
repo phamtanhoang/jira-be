@@ -266,7 +266,12 @@ export class WebhooksService {
         },
         select: { id: true },
       })
-      .catch(() => null);
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `webhook delivery row insert failed for hook ${hook.id}: ${stringifyErr(err)}`,
+        );
+        return null;
+      });
 
     if (!delivery) {
       this.logger.warn(`failed to record pending delivery for hook ${hook.id}`);
@@ -330,8 +335,20 @@ export class WebhooksService {
           deliveredAt: new Date(),
         },
       })
-      .catch(() => null);
+      .catch((err: unknown) => {
+        // Final state write failed — losing audit trail of this delivery, but
+        // the webhook target already received the payload (or didn't). Don't
+        // throw, just surface for ops.
+        this.logger.warn(
+          `webhook delivery final-state update failed for ${delivery.id}: ${stringifyErr(err)}`,
+        );
+        return null;
+      });
   }
+}
+
+function stringifyErr(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 function isSlackUrl(url: string): boolean {
