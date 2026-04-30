@@ -5,8 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { WorkspaceRole } from '@prisma/client';
+import { CacheTagsService } from '@/core/cache/cache-tags.service';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import {
+  InsufficientPermissionsException,
+  WorkspaceAccessDeniedException,
+} from '@/core/exceptions';
 import { SettingsService } from '@/modules/settings/settings.service';
 import {
   AddWorkspaceMemberDto,
@@ -20,6 +25,7 @@ export class WorkspacesService {
   constructor(
     private prisma: PrismaService,
     private settings: SettingsService,
+    private cacheTags: CacheTagsService,
   ) {}
 
   async create(userId: string, dto: CreateWorkspaceDto) {
@@ -31,7 +37,7 @@ export class WorkspacesService {
     if (existing)
       throw new BadRequestException(MSG.ERROR.WORKSPACE_SLUG_EXISTS);
 
-    return this.prisma.workspace.create({
+    const created = await this.prisma.workspace.create({
       data: {
         name: dto.name,
         slug,
@@ -51,17 +57,27 @@ export class WorkspacesService {
         },
       },
     });
+
+    void this.cacheTags.invalidateTag(`user:${userId}`);
+    return created;
   }
 
   async findAllByUser(userId: string) {
-    return this.prisma.workspace.findMany({
-      where: { members: { some: { userId } } },
-      include: {
-        _count: { select: { members: true, projects: true } },
-        owner: { select: { id: true, name: true, email: true, image: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.cacheTags.wrap(
+      `ws:list:user:${userId}`,
+      [`user:${userId}`, 'workspaces'],
+      () =>
+        this.prisma.workspace.findMany({
+          where: { members: { some: { userId } } },
+          include: {
+            _count: { select: { members: true, projects: true } },
+            owner: {
+              select: { id: true, name: true, email: true, image: true },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+    );
   }
 
   async findById(workspaceId: string, userId: string) {
@@ -107,16 +123,25 @@ export class WorkspacesService {
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.logoUrl !== undefined) data.logoUrl = dto.logoUrl;
 
-    return this.prisma.workspace.update({
+    const updated = await this.prisma.workspace.update({
       where: { id: workspaceId },
       data,
     });
+    void this.cacheTags.invalidateTag(`workspace:${workspaceId}`);
+    return updated;
   }
 
   async delete(workspaceId: string, userId: string) {
     await this.assertRole(workspaceId, userId, [WorkspaceRole.OWNER]);
 
-    return this.prisma.workspace.delete({ where: { id: workspaceId } });
+    const deleted = await this.prisma.workspace.delete({
+      where: { id: workspaceId },
+    });
+    void this.cacheTags.invalidateTags([
+      `workspace:${workspaceId}`,
+      'workspaces',
+    ]);
+    return deleted;
   }
 
   // ─── Members ──────────────────────────────────────────
@@ -153,7 +178,7 @@ export class WorkspacesService {
       }
     }
 
-    return this.prisma.workspaceMember.create({
+    const created = await this.prisma.workspaceMember.create({
       data: {
         workspaceId,
         userId: user.id,
@@ -163,6 +188,9 @@ export class WorkspacesService {
         user: { select: { id: true, name: true, email: true, image: true } },
       },
     });
+    // The new member's workspace list now includes this workspace.
+    void this.cacheTags.invalidateTag(`user:${user.id}`);
+    return created;
   }
 
   async updateMember(
@@ -211,7 +239,11 @@ export class WorkspacesService {
       throw new ForbiddenException(MSG.ERROR.CANNOT_REMOVE_OWNER);
     }
 
-    return this.prisma.workspaceMember.delete({ where: { id: memberId } });
+    const removed = await this.prisma.workspaceMember.delete({
+      where: { id: memberId },
+    });
+    void this.cacheTags.invalidateTag(`user:${member.userId}`);
+    return removed;
   }
 
   // ─── Helpers ──────────────────────────────────────────
@@ -230,7 +262,7 @@ export class WorkspacesService {
     const member = await this.prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
     });
-    if (!member) throw new ForbiddenException(MSG.ERROR.NOT_WORKSPACE_MEMBER);
+    if (!member) throw new WorkspaceAccessDeniedException();
     return member;
   }
 
@@ -243,7 +275,7 @@ export class WorkspacesService {
   ) {
     const member = await this.assertMember(workspaceId, userId);
     if (!roles.includes(member.role)) {
-      throw new ForbiddenException(MSG.ERROR.INSUFFICIENT_PERMISSIONS);
+      throw new InsufficientPermissionsException();
     }
     return member;
   }

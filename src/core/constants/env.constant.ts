@@ -66,6 +66,14 @@ export const ENV = {
   VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY ?? '',
   VAPID_SUBJECT: process.env.VAPID_SUBJECT ?? '',
 
+  // ─── Cache (Redis, optional) ──────────────────────────────────────────
+  // When REDIS_URL is empty, cache writes/reads no-op (in-memory fallback).
+  // Set CACHE_DISABLED=1 to bypass entirely — useful when the cache layer
+  // is suspected of serving stale data.
+  REDIS_URL: process.env.REDIS_URL ?? '',
+  CACHE_TTL_DEFAULT: parseInt(process.env.CACHE_TTL_DEFAULT ?? '60'),
+  CACHE_DISABLED: process.env.CACHE_DISABLED === '1',
+
   // ─── Derived flags — single place we compare NODE_ENV ─────────────────
   IS_PRODUCTION: NODE_ENV === 'production',
   IS_DEVELOPMENT: NODE_ENV === 'development',

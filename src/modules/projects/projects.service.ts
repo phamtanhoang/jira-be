@@ -4,9 +4,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ProjectRole, WorkspaceRole } from '@prisma/client';
+import { ProjectRole } from '@prisma/client';
 import { MSG, USER_SELECT_FULL } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import {
+  InsufficientPermissionsException,
+  ProjectAccessDeniedException,
+  QuotaExceededException,
+} from '@/core/exceptions';
 import { assertProjectAccess } from '@/core/utils';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { BoardsService } from '@/modules/boards/boards.service';
@@ -19,6 +24,7 @@ import {
   UpdateProjectDto,
   UpdateProjectMemberDto,
 } from './dto';
+import { ProjectsRepository } from './projects.repository';
 
 @Injectable()
 export class ProjectsService {
@@ -28,6 +34,7 @@ export class ProjectsService {
     private boardsService: BoardsService,
     private audit: AdminAuditService,
     private settings: SettingsService,
+    private projectsRepository: ProjectsRepository,
   ) {}
 
   async create(userId: string, dto: CreateProjectDto) {
@@ -40,7 +47,7 @@ export class ProjectsService {
         where: { workspaceId: dto.workspaceId },
       });
       if (count >= quotas.maxProjectsPerWorkspace) {
-        throw new ForbiddenException(MSG.ERROR.QUOTA_PROJECTS_REACHED);
+        throw new QuotaExceededException(MSG.ERROR.QUOTA_PROJECTS_REACHED);
       }
     }
 
@@ -87,35 +94,18 @@ export class ProjectsService {
     );
 
     // Workspace OWNER/ADMIN see everything. Other roles (MEMBER/VIEWER) see only
-    // projects they are a member of.
-    const isWorkspaceAdmin =
-      wsMember.role === WorkspaceRole.OWNER ||
-      wsMember.role === WorkspaceRole.ADMIN;
-
-    return this.prisma.project.findMany({
-      where: {
-        workspaceId,
-        ...(isWorkspaceAdmin ? {} : { members: { some: { userId } } }),
-      },
-      include: {
-        lead: USER_SELECT_FULL,
-        _count: { select: { members: true } },
-      },
-      orderBy: { createdAt: 'desc' },
+    // projects they are a member of. Repository encapsulates the conditional
+    // `where` clause.
+    return this.projectsRepository.findAllByWorkspaceForUser({
+      workspaceId,
+      userId,
+      wsRole: wsMember.role,
     });
   }
 
   async findById(projectId: string, userId: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
-      include: {
-        lead: USER_SELECT_FULL,
-        members: {
-          include: { user: USER_SELECT_FULL },
-          orderBy: { joinedAt: 'asc' },
-        },
-      },
-    });
+    const project =
+      await this.projectsRepository.findByIdWithMembers(projectId);
     if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
 
     await this.assertProjectAccess(project.id, userId, project.workspaceId);
@@ -347,9 +337,9 @@ export class ProjectsService {
     const member = await this.prisma.projectMember.findUnique({
       where: { projectId_userId: { projectId, userId } },
     });
-    if (!member) throw new ForbiddenException(MSG.ERROR.NOT_PROJECT_MEMBER);
+    if (!member) throw new ProjectAccessDeniedException();
     if (!roles.includes(member.role)) {
-      throw new ForbiddenException(MSG.ERROR.INSUFFICIENT_PERMISSIONS);
+      throw new InsufficientPermissionsException();
     }
     return member;
   }

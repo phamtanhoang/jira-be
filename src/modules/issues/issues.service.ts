@@ -1,8 +1,8 @@
 import {
-  BadRequestException,
-  ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import {
   ActivityAction,
@@ -13,136 +13,40 @@ import {
   StatusCategory,
   WorkspaceRole,
 } from '@prisma/client';
-import {
-  MSG,
-  USER_SELECT_BASIC,
-  USER_SELECT_FULL,
-  BOARD_COLUMN_SELECT,
-} from '@/core/constants';
+import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
-import {
-  csvEscape,
-  generateShareToken,
-  newMentions,
-  sanitizeRichHtml,
-} from '@/core/utils';
+import { IssueNotFoundException } from '@/core/exceptions';
+import { newMentions, sanitizeRichHtml } from '@/core/utils';
 import { CustomFieldsService } from '@/modules/custom-fields/custom-fields.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { ProjectsService } from '@/modules/projects/projects.service';
 import { WebhooksService } from '@/modules/webhooks/webhooks.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import { CreateIssueDto, UpdateIssueDto, MoveIssueDto } from './dto';
-
-const ACTIVITY_LIMIT = 20;
-
-const ISSUE_INCLUDE = {
-  reporter: USER_SELECT_BASIC,
-  assignee: USER_SELECT_BASIC,
-  boardColumn: BOARD_COLUMN_SELECT,
-  sprint: { select: { id: true, name: true, status: true } },
-  parent: { select: { id: true, key: true, summary: true } },
-  epic: { select: { id: true, key: true, summary: true } },
-  labels: { include: { label: true } },
-  customFieldValues: {
-    select: {
-      fieldId: true,
-      valueText: true,
-      valueNumber: true,
-      valueDate: true,
-      valueSelect: true,
-    },
-  },
-  _count: { select: { children: true, comments: true, attachments: true } },
-};
-
-// Peer issue summary used inside link rows. Kept lean — link tables can
-// fan out to dozens of issues per detail page, so we skip the relations.
-const ISSUE_LINK_PEER_SELECT = {
-  select: {
-    id: true,
-    key: true,
-    summary: true,
-    type: true,
-    boardColumn: BOARD_COLUMN_SELECT,
-  },
-} as const;
-
-// Adds a `stars` filtered to the current user so the UI can render the toggle
-// state. Empty array → not starred; one row → starred. We keep the static
-// ISSUE_INCLUDE for hot paths and merge the per-user clause when we have a
-// userId in scope.
-function withUserMeta<T extends Record<string, unknown>>(
-  include: T,
-  userId: string,
-) {
-  return {
-    ...include,
-    stars: { where: { userId }, select: { userId: true } },
-    watchers: { where: { userId }, select: { userId: true } },
-  };
-}
-
-type IssueWithUserMeta = {
-  stars?: { userId: string }[];
-  watchers?: { userId: string }[];
-} & Record<string, unknown>;
+import { IssuesRepository } from './issues.repository';
+import {
+  ISSUE_INCLUDE,
+  customFieldValueMatch,
+  decorateUserMeta,
+  withUserMeta,
+} from './issues.shared';
+import { IssuesActivityService } from './services/issues-activity.service';
+import { IssuesBulkService } from './services/issues-bulk.service';
+import { IssuesExportService } from './services/issues-export.service';
+import { IssuesLabelsService } from './services/issues-labels.service';
+import { IssuesLinksService } from './services/issues-links.service';
+import { IssuesShareService } from './services/issues-share.service';
+import { IssuesWatchersService } from './services/issues-watchers.service';
 
 /**
- * Build the per-row `customFieldValues.some` match clause for a given field
- * type. Returns null when the value is empty or fails to coerce — caller
- * should skip filtering on that field rather than fail the whole query.
+ * Façade for the issue domain. Public API matches the pre-split version
+ * one-for-one — controllers and other modules continue to inject
+ * `IssuesService` and call the same methods. Behaviour-specific work has
+ * been moved into focused sub-services (Labels, Links, Share, Watchers,
+ * Bulk, Export, Activity) under `./services/`. Core CRUD (create, find*,
+ * update, move, delete, dashboard, search, custom-field clauses, webhook
+ * fan-out) stays here because it is tightly coupled.
  */
-function customFieldValueMatch(
-  type: 'TEXT' | 'NUMBER' | 'DATE' | 'SELECT' | 'MULTI_SELECT',
-  value: string | string[],
-): Prisma.CustomFieldValueWhereInput | null {
-  const first = Array.isArray(value) ? value[0] : value;
-  if (typeof first !== 'string' || first === '') return null;
-  switch (type) {
-    case 'TEXT':
-      return {
-        valueText: { contains: first, mode: Prisma.QueryMode.insensitive },
-      };
-    case 'NUMBER': {
-      const n = Number(first);
-      if (Number.isNaN(n)) return null;
-      return { valueNumber: n };
-    }
-    case 'DATE': {
-      const start = new Date(first);
-      if (Number.isNaN(start.getTime())) return null;
-      // Match the same calendar day in UTC.
-      const next = new Date(start);
-      next.setUTCDate(start.getUTCDate() + 1);
-      return { valueDate: { gte: start, lt: next } };
-    }
-    case 'SELECT':
-    case 'MULTI_SELECT': {
-      const candidates = Array.isArray(value)
-        ? value.filter((v) => typeof v === 'string' && v !== '')
-        : [first];
-      if (candidates.length === 0) return null;
-      return { valueSelect: { hasSome: candidates } };
-    }
-    default:
-      return null;
-  }
-}
-
-function decorateUserMeta<T extends IssueWithUserMeta>(
-  issue: T,
-): Omit<T, 'stars' | 'watchers'> & {
-  starredByMe: boolean;
-  watchedByMe: boolean;
-} {
-  const { stars, watchers, ...rest } = issue;
-  return {
-    ...rest,
-    starredByMe: (stars ?? []).length > 0,
-    watchedByMe: (watchers ?? []).length > 0,
-  };
-}
-
 @Injectable()
 export class IssuesService {
   constructor(
@@ -152,6 +56,20 @@ export class IssuesService {
     private notifications: NotificationsService,
     private webhooks: WebhooksService,
     private customFields: CustomFieldsService,
+    private issuesRepository: IssuesRepository,
+    @Inject(forwardRef(() => IssuesActivityService))
+    private activityService: IssuesActivityService,
+    @Inject(forwardRef(() => IssuesBulkService))
+    private bulkService: IssuesBulkService,
+    private exportService: IssuesExportService,
+    @Inject(forwardRef(() => IssuesLabelsService))
+    private labelsService: IssuesLabelsService,
+    @Inject(forwardRef(() => IssuesLinksService))
+    private linksService: IssuesLinksService,
+    @Inject(forwardRef(() => IssuesShareService))
+    private shareService: IssuesShareService,
+    @Inject(forwardRef(() => IssuesWatchersService))
+    private watchersService: IssuesWatchersService,
   ) {}
 
   async create(userId: string, dto: CreateIssueDto) {
@@ -224,8 +142,9 @@ export class IssuesService {
       }
       // Auto-subscribe assignee + reporter so they receive future activity
       // notifications without an explicit "Watch" click.
-      if (dto.assigneeId) this.autoWatch(issue.id, dto.assigneeId);
-      this.autoWatch(issue.id, userId);
+      if (dto.assigneeId)
+        this.watchersService.autoWatch(issue.id, dto.assigneeId);
+      this.watchersService.autoWatch(issue.id, userId);
 
       // Apply custom field values if the payload includes them. Best-effort:
       // a bad fieldId or wrong-type value is silently dropped rather than
@@ -236,16 +155,7 @@ export class IssuesService {
           .catch(() => null);
       }
 
-      this.webhooks.dispatch(project.workspaceId, 'issue.created', {
-        issue: {
-          id: issue.id,
-          key: issue.key,
-          summary: issue.summary,
-          type: issue.type,
-        },
-        actor: { id: userId },
-        link: `/issues/${issue.key}`,
-      });
+      void this.fireIssueWebhook('issue.created', issue, userId);
 
       return decorateUserMeta(issue);
     });
@@ -437,37 +347,11 @@ export class IssuesService {
   }
 
   async findByKey(key: string, userId: string) {
-    const issue = await this.prisma.issue.findUnique({
-      where: { key },
-      include: {
-        ...withUserMeta(ISSUE_INCLUDE, userId),
-        children: {
-          include: {
-            assignee: USER_SELECT_BASIC,
-            boardColumn: BOARD_COLUMN_SELECT,
-          },
-          orderBy: { createdAt: 'asc' },
-        },
-        comments: {
-          include: { author: USER_SELECT_BASIC },
-          orderBy: { createdAt: 'asc' },
-        },
-        activities: {
-          include: { user: USER_SELECT_BASIC },
-          orderBy: { createdAt: 'desc' },
-          take: ACTIVITY_LIMIT,
-        },
-        outboundLinks: {
-          include: { target: ISSUE_LINK_PEER_SELECT },
-          orderBy: { createdAt: 'asc' },
-        },
-        inboundLinks: {
-          include: { source: ISSUE_LINK_PEER_SELECT },
-          orderBy: { createdAt: 'asc' },
-        },
-      },
-    });
-    if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
+    const issue = await this.issuesRepository.findByKeyWithRelations(
+      key,
+      userId,
+    );
+    if (!issue) throw new IssueNotFoundException();
 
     await this.projectsService.assertProjectAccess(issue.projectId, userId);
 
@@ -479,7 +363,7 @@ export class IssuesService {
       where: { id: issueId },
       include: withUserMeta(ISSUE_INCLUDE, userId),
     });
-    if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
+    if (!issue) throw new IssueNotFoundException();
 
     await this.projectsService.assertProjectAccess(issue.projectId, userId);
 
@@ -568,7 +452,7 @@ export class IssuesService {
         body: updated.summary,
         link: `/issues/${updated.key}`,
       });
-      this.autoWatch(issueId, newAssignee);
+      this.watchersService.autoWatch(issueId, newAssignee);
     }
 
     // Description edit: surface freshly-introduced @mentions only.
@@ -670,9 +554,20 @@ export class IssuesService {
     return result;
   }
 
-  // Look up the workspaceId for the issue's project then forward to the
-  // webhook dispatcher. Pulled out so issue.create/update/move/delete don't
-  // each duplicate the lookup.
+  // Lightweight endpoint for FE board/list views: returns just the IDs the
+  // current user has starred. FE merges client-side to avoid join cost on
+  // every list query.
+  async findStarredIds(userId: string, projectId?: string) {
+    const rows = await this.prisma.issueStar.findMany({
+      where: {
+        userId,
+        ...(projectId && { issue: { projectId } }),
+      },
+      select: { issueId: true },
+    });
+    return rows.map((r) => r.issueId);
+  }
+
   /**
    * Translate the FE's `customFields` filter map into Prisma `where` clauses.
    * Each entry becomes a `customFieldValues: { some: { fieldId, ...match } }`
@@ -711,6 +606,9 @@ export class IssuesService {
     return clauses;
   }
 
+  // Look up the workspaceId for the issue's project then forward to the
+  // webhook dispatcher. Pulled out so issue.create/update/move/delete don't
+  // each duplicate the lookup.
   private async fireIssueWebhook(
     event: string,
     issue: {
@@ -741,377 +639,75 @@ export class IssuesService {
     });
   }
 
-  // ─── Star / Favorite ──────────────────────────────────
+  // ─── Façade: delegate to sub-services ─────────────────
+  // Public API stays byte-identical so controllers and external callers
+  // (public.controller, comments.service) need no changes.
 
-  // Idempotent: starring an already-starred issue is a no-op (upsert pattern).
-  async star(issueId: string, userId: string) {
-    await this.findById(issueId, userId);
-    await this.prisma.issueStar.upsert({
-      where: { issueId_userId: { issueId, userId } },
-      update: {},
-      create: { issueId, userId },
-    });
-    return { starred: true };
+  star(issueId: string, userId: string) {
+    return this.watchersService.star(issueId, userId);
   }
 
-  async unstar(issueId: string, userId: string) {
-    await this.findById(issueId, userId);
-    await this.prisma.issueStar
-      .delete({ where: { issueId_userId: { issueId, userId } } })
-      .catch(() => null); // already unstarred → silent no-op
-    return { starred: false };
+  unstar(issueId: string, userId: string) {
+    return this.watchersService.unstar(issueId, userId);
   }
 
-  // ─── Watch / Subscribe ───────────────────────────────
-
-  async watch(issueId: string, userId: string) {
-    await this.findById(issueId, userId);
-    await this.prisma.issueWatcher.upsert({
-      where: { issueId_userId: { issueId, userId } },
-      update: {},
-      create: { issueId, userId },
-    });
-    return { watching: true };
+  watch(issueId: string, userId: string) {
+    return this.watchersService.watch(issueId, userId);
   }
 
-  async unwatch(issueId: string, userId: string) {
-    await this.findById(issueId, userId);
-    await this.prisma.issueWatcher
-      .delete({ where: { issueId_userId: { issueId, userId } } })
-      .catch(() => null);
-    return { watching: false };
+  unwatch(issueId: string, userId: string) {
+    return this.watchersService.unwatch(issueId, userId);
   }
 
-  async findWatchers(issueId: string, userId: string) {
-    await this.findById(issueId, userId);
-    const rows = await this.prisma.issueWatcher.findMany({
-      where: { issueId },
-      include: { user: USER_SELECT_BASIC },
-      orderBy: { createdAt: 'asc' },
-    });
-    return rows.map((r) => r.user);
+  findWatchers(issueId: string, userId: string) {
+    return this.watchersService.findWatchers(issueId, userId);
   }
 
-  // Internal-only, fire-and-forget. Called by issue.create/update (assignee)
-  // and comments.create (commenter) to keep watchers populated without
-  // surfacing a UI choice. Idempotent.
   autoWatch(issueId: string, userId: string): void {
-    if (!issueId || !userId) return;
-    void this.prisma.issueWatcher
-      .upsert({
-        where: { issueId_userId: { issueId, userId } },
-        update: {},
-        create: { issueId, userId },
-      })
-      .catch(() => null);
+    this.watchersService.autoWatch(issueId, userId);
   }
 
-  // ─── Share Tokens (public read-only links) ───────────
-
-  /**
-   * Mint a fresh share token. Caller must be a project member — token grants
-   * read-only access to anyone with the URL, so we gate creation, not reads.
-   */
-  async createShareToken(
-    issueId: string,
-    userId: string,
-    opts?: { expiresInSec?: number },
-  ) {
-    await this.findById(issueId, userId);
-    const token = generateShareToken();
-    const expiresAt =
-      opts?.expiresInSec && opts.expiresInSec > 0
-        ? new Date(Date.now() + opts.expiresInSec * 1000)
-        : null;
-    return this.prisma.issueShareToken.create({
-      data: { issueId, createdById: userId, token, expiresAt },
-    });
+  addLabel(issueId: string, labelId: string, userId: string) {
+    return this.labelsService.addLabel(issueId, labelId, userId);
   }
 
-  async listShareTokens(issueId: string, userId: string) {
-    await this.findById(issueId, userId);
-    return this.prisma.issueShareToken.findMany({
-      where: { issueId },
-      orderBy: { createdAt: 'desc' },
-    });
+  removeLabel(issueId: string, labelId: string, userId: string) {
+    return this.labelsService.removeLabel(issueId, labelId, userId);
   }
 
-  async revokeShareToken(issueId: string, tokenId: string, userId: string) {
-    await this.findById(issueId, userId);
-    const tok = await this.prisma.issueShareToken.findUnique({
-      where: { id: tokenId },
-    });
-    if (!tok || tok.issueId !== issueId) {
-      throw new NotFoundException(MSG.ERROR.SHARE_TOKEN_NOT_FOUND);
-    }
-    await this.prisma.issueShareToken.delete({ where: { id: tokenId } });
-  }
-
-  /**
-   * Public — no auth. Returns a slimmed-down issue suitable for a read-only
-   * page. Bumps viewCount fire-and-forget so it doesn't add latency to the
-   * public read path.
-   */
-  async findByShareToken(token: string) {
-    const tok = await this.prisma.issueShareToken.findUnique({
-      where: { token },
-    });
-    if (!tok) throw new NotFoundException(MSG.ERROR.SHARE_TOKEN_NOT_FOUND);
-    if (tok.expiresAt && tok.expiresAt < new Date()) {
-      throw new NotFoundException(MSG.ERROR.SHARE_TOKEN_EXPIRED);
-    }
-
-    const issue = await this.prisma.issue.findUnique({
-      where: { id: tok.issueId },
-      // Keep author/assignee names but drop emails. Skip worklogs entirely
-      // — those carry hours/cost data that shouldn't leak via a copy-pasted
-      // link.
-      include: {
-        reporter: USER_SELECT_BASIC,
-        assignee: USER_SELECT_BASIC,
-        boardColumn: BOARD_COLUMN_SELECT,
-        labels: { include: { label: true } },
-        comments: {
-          include: { author: USER_SELECT_BASIC },
-          orderBy: { createdAt: 'asc' },
-        },
-        attachments: {
-          select: {
-            id: true,
-            fileName: true,
-            mimeType: true,
-            fileSize: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
-    if (!issue) throw new NotFoundException(MSG.ERROR.ISSUE_NOT_FOUND);
-
-    void this.prisma.issueShareToken
-      .update({
-        where: { id: tok.id },
-        data: { viewCount: { increment: 1 } },
-      })
-      .catch(() => null);
-
-    return issue;
-  }
-
-  // ─── Issue Links ─────────────────────────────────────
-
-  async createLink(
+  createLink(
     sourceIssueId: string,
     userId: string,
     dto: { targetIssueId: string; type: IssueLinkType },
   ) {
-    if (sourceIssueId === dto.targetIssueId) {
-      throw new BadRequestException(MSG.ERROR.ISSUE_LINK_SELF);
-    }
-    // Both ends must exist + caller must have access to BOTH (linking across
-    // projects you can't see leaks issue keys/summaries).
-    await this.findById(sourceIssueId, userId);
-    await this.findById(dto.targetIssueId, userId);
-
-    try {
-      return await this.prisma.issueLink.create({
-        data: {
-          sourceIssueId,
-          targetIssueId: dto.targetIssueId,
-          type: dto.type,
-        },
-        include: { target: ISSUE_LINK_PEER_SELECT },
-      });
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        throw new ConflictException(MSG.ERROR.ISSUE_LINK_EXISTS);
-      }
-      throw err;
-    }
+    return this.linksService.createLink(sourceIssueId, userId, dto);
   }
 
-  async deleteLink(issueId: string, linkId: string, userId: string) {
-    await this.findById(issueId, userId);
-    const link = await this.prisma.issueLink.findUnique({
-      where: { id: linkId },
-    });
-    if (!link) throw new NotFoundException(MSG.ERROR.ISSUE_LINK_NOT_FOUND);
-    // Allow deletion from either end of the link — both sides see it.
-    if (link.sourceIssueId !== issueId && link.targetIssueId !== issueId) {
-      throw new NotFoundException(MSG.ERROR.ISSUE_LINK_NOT_FOUND);
-    }
-    await this.prisma.issueLink.delete({ where: { id: linkId } });
+  deleteLink(issueId: string, linkId: string, userId: string) {
+    return this.linksService.deleteLink(issueId, linkId, userId);
   }
 
-  // ─── Export ───────────────────────────────────────────
-
-  // Plain CSV. Headers chosen to match what users typically slice in Excel:
-  // identifiers, type/status/priority, who's working on it, dates. Description
-  // is intentionally omitted — it's HTML now and would explode row sizes.
-  async exportCsv(projectId: string, userId: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
-    });
-    if (!project) throw new NotFoundException(MSG.ERROR.PROJECT_NOT_FOUND);
-
-    await this.projectsService.assertProjectAccess(
-      project.id,
-      userId,
-      project.workspaceId,
-    );
-
-    const rows = await this.prisma.issue.findMany({
-      where: { projectId },
-      include: {
-        // FULL select: CSV falls back to email when display name is missing.
-        reporter: USER_SELECT_FULL,
-        assignee: USER_SELECT_FULL,
-        boardColumn: BOARD_COLUMN_SELECT,
-        sprint: { select: { name: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    const headers = [
-      'Key',
-      'Summary',
-      'Type',
-      'Priority',
-      'Status',
-      'Assignee',
-      'Reporter',
-      'Sprint',
-      'StoryPoints',
-      'DueDate',
-      'CreatedAt',
-    ];
-
-    const lines = [
-      headers.join(','),
-      ...rows.map((r) =>
-        [
-          r.key,
-          r.summary,
-          r.type,
-          r.priority,
-          r.boardColumn?.name ?? '',
-          r.assignee?.name ?? r.assignee?.email ?? '',
-          r.reporter?.name ?? r.reporter?.email ?? '',
-          r.sprint?.name ?? '',
-          r.storyPoints ?? '',
-          r.dueDate ? r.dueDate.toISOString() : '',
-          r.createdAt.toISOString(),
-        ]
-          .map(csvEscape)
-          .join(','),
-      ),
-    ];
-
-    return lines.join('\n');
+  createShareToken(
+    issueId: string,
+    userId: string,
+    opts?: { expiresInSec?: number },
+  ) {
+    return this.shareService.createShareToken(issueId, userId, opts);
   }
 
-  // Lightweight endpoint for FE board/list views: returns just the IDs the
-  // current user has starred. FE merges client-side to avoid join cost on
-  // every list query.
-  async findStarredIds(userId: string, projectId?: string) {
-    const rows = await this.prisma.issueStar.findMany({
-      where: {
-        userId,
-        ...(projectId && { issue: { projectId } }),
-      },
-      select: { issueId: true },
-    });
-    return rows.map((r) => r.issueId);
+  listShareTokens(issueId: string, userId: string) {
+    return this.shareService.listShareTokens(issueId, userId);
   }
 
-  // ─── Activity ─────────────────────────────────────────
-
-  async findActivity(issueId: string, userId: string) {
-    await this.findById(issueId, userId);
-
-    const rows = await this.prisma.activity.findMany({
-      where: { issueId },
-      include: { user: USER_SELECT_BASIC },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
-
-    // Field → kind of entity referenced by oldValue/newValue. We resolve these
-    // lazily so the activity feed can show "Alice" instead of a raw UUID even
-    // when the user was later renamed.
-    const USER_FIELDS = new Set(['assigneeId', 'reporterId']);
-    const SPRINT_FIELDS = new Set(['sprintId']);
-    const ISSUE_FIELDS = new Set(['parentId', 'epicId']);
-
-    const userIds = new Set<string>();
-    const sprintIds = new Set<string>();
-    const issueIds = new Set<string>();
-
-    for (const r of rows) {
-      const field = r.field ?? '';
-      for (const v of [r.oldValue, r.newValue]) {
-        if (!v) continue;
-        if (USER_FIELDS.has(field)) userIds.add(v);
-        else if (SPRINT_FIELDS.has(field)) sprintIds.add(v);
-        else if (ISSUE_FIELDS.has(field)) issueIds.add(v);
-      }
-    }
-
-    const [users, sprints, issueRefs] = await Promise.all([
-      userIds.size
-        ? this.prisma.user.findMany({
-            where: { id: { in: [...userIds] } },
-            select: { id: true, name: true, email: true },
-          })
-        : Promise.resolve(
-            [] as { id: string; name: string | null; email: string }[],
-          ),
-      sprintIds.size
-        ? this.prisma.sprint.findMany({
-            where: { id: { in: [...sprintIds] } },
-            select: { id: true, name: true },
-          })
-        : Promise.resolve([] as { id: string; name: string }[]),
-      issueIds.size
-        ? this.prisma.issue.findMany({
-            where: { id: { in: [...issueIds] } },
-            select: { id: true, key: true, summary: true },
-          })
-        : Promise.resolve([] as { id: string; key: string; summary: string }[]),
-    ]);
-
-    const userMap = new Map<string, string>(
-      users.map((u) => [u.id, u.name ?? u.email] as const),
-    );
-    const sprintMap = new Map<string, string>(
-      sprints.map((s) => [s.id, s.name] as const),
-    );
-    const issueMap = new Map<string, string>(
-      issueRefs.map((i) => [i.id, `${i.key} ${i.summary}`] as const),
-    );
-
-    function resolve(field: string | null, value: string | null) {
-      if (!value) return value;
-      if (field && USER_FIELDS.has(field)) return userMap.get(value) ?? null;
-      if (field && SPRINT_FIELDS.has(field))
-        return sprintMap.get(value) ?? null;
-      if (field && ISSUE_FIELDS.has(field)) return issueMap.get(value) ?? null;
-      return value;
-    }
-
-    return rows.map((r) => ({
-      ...r,
-      oldValueDisplay: resolve(r.field, r.oldValue),
-      newValueDisplay: resolve(r.field, r.newValue),
-    }));
+  revokeShareToken(issueId: string, tokenId: string, userId: string) {
+    return this.shareService.revokeShareToken(issueId, tokenId, userId);
   }
 
-  // ─── Bulk Operations ──────────────────────────────────
+  findByShareToken(token: string) {
+    return this.shareService.findByShareToken(token);
+  }
 
-  async bulkUpdate(
+  bulkUpdate(
     userId: string,
     dto: {
       issueIds: string[];
@@ -1120,49 +716,18 @@ export class IssuesService {
       priority?: string;
     },
   ) {
-    // Verify access for first issue (all should be in same project)
-    await this.findById(dto.issueIds[0], userId);
-
-    const data: Record<string, unknown> = {};
-    if (dto.sprintId !== undefined) data.sprintId = dto.sprintId;
-    if (dto.assigneeId !== undefined) data.assigneeId = dto.assigneeId;
-    if (dto.priority !== undefined) data.priority = dto.priority;
-
-    const result = await this.prisma.issue.updateMany({
-      where: { id: { in: dto.issueIds } },
-      data,
-    });
-
-    return { count: result.count };
+    return this.bulkService.bulkUpdate(userId, dto);
   }
 
-  async bulkDelete(userId: string, issueIds: string[]) {
-    // Verify access
-    await this.findById(issueIds[0], userId);
-
-    const result = await this.prisma.issue.deleteMany({
-      where: { id: { in: issueIds } },
-    });
-
-    return { count: result.count };
+  bulkDelete(userId: string, issueIds: string[]) {
+    return this.bulkService.bulkDelete(userId, issueIds);
   }
 
-  // ─── Labels ───────────────────────────────────────────
-
-  async addLabel(issueId: string, labelId: string, userId: string) {
-    await this.findById(issueId, userId);
-
-    return this.prisma.issueLabel.create({
-      data: { issueId, labelId },
-      include: { label: true },
-    });
+  exportCsv(projectId: string, userId: string) {
+    return this.exportService.exportCsv(projectId, userId);
   }
 
-  async removeLabel(issueId: string, labelId: string, userId: string) {
-    await this.findById(issueId, userId);
-
-    return this.prisma.issueLabel.delete({
-      where: { issueId_labelId: { issueId, labelId } },
-    });
+  findActivity(issueId: string, userId: string) {
+    return this.activityService.findActivity(issueId, userId);
   }
 }

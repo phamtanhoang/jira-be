@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { AppCacheModule } from '@/core/cache/cache.module';
 import { PrismaModule } from '@/core/database/prisma.module';
 import { AllExceptionsFilter } from '@/core/filters/http-exception.filter';
 import {
@@ -52,6 +53,7 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     // their own @Throttle() decorator per-route.
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
     ScheduleModule.forRoot(),
+    AppCacheModule,
     PrismaModule,
     LogsModule,
     AuthModule,
