@@ -24,6 +24,7 @@ import { CustomFieldsModule } from '@/modules/custom-fields/custom-fields.module
 import { DebugModule } from '@/modules/debug/debug.module';
 import { FeatureFlagsModule } from '@/modules/feature-flags/feature-flags.module';
 import { GdprModule } from '@/modules/gdpr/gdpr.module';
+import { HealthModule } from '@/modules/health/health.module';
 import { InviteLinksModule } from '@/modules/invite-links/invite-links.module';
 import { IssueTemplatesModule } from '@/modules/issue-templates/issue-templates.module';
 import { IssuesModule } from '@/modules/issues/issues.module';
@@ -73,6 +74,7 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     UsersModule,
     FeatureFlagsModule,
     GdprModule,
+    HealthModule,
     AdminAuditModule,
     NotificationsModule,
     PatModule,

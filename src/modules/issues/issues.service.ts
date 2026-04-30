@@ -13,6 +13,7 @@ import {
   StatusCategory,
   WorkspaceRole,
 } from '@prisma/client';
+import { CacheTagsService } from '@/core/cache/cache-tags.service';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { IssueNotFoundException } from '@/core/exceptions';
@@ -56,6 +57,7 @@ export class IssuesService {
     private notifications: NotificationsService,
     private webhooks: WebhooksService,
     private customFields: CustomFieldsService,
+    private cacheTags: CacheTagsService,
     private issuesRepository: IssuesRepository,
     @Inject(forwardRef(() => IssuesActivityService))
     private activityService: IssuesActivityService,
@@ -347,15 +349,26 @@ export class IssuesService {
   }
 
   async findByKey(key: string, userId: string) {
-    const issue = await this.issuesRepository.findByKeyWithRelations(
-      key,
-      userId,
+    // Per-user cache key — `withUserMeta` bakes `stars`/`watchers` filtered by
+    // userId into the result. Tagged by issue id (resolved after fetch) so
+    // mutations on the issue invalidate every per-user variant.
+    const cacheKey = `issue:key:${key}:user:${userId}`;
+    return this.cacheTags.wrap(
+      cacheKey,
+      [`issue:key:${key}`],
+      async () => {
+        const issue = await this.issuesRepository.findByKeyWithRelations(
+          key,
+          userId,
+        );
+        if (!issue) throw new IssueNotFoundException();
+
+        await this.projectsService.assertProjectAccess(issue.projectId, userId);
+
+        return decorateUserMeta(issue);
+      },
+      /* ttlSec */ 300,
     );
-    if (!issue) throw new IssueNotFoundException();
-
-    await this.projectsService.assertProjectAccess(issue.projectId, userId);
-
-    return decorateUserMeta(issue);
   }
 
   async findById(issueId: string, userId: string) {
@@ -477,6 +490,10 @@ export class IssuesService {
     }
 
     void this.fireIssueWebhook('issue.updated', updated, userId);
+    void this.cacheTags.invalidateTags([
+      `issue:id:${issueId}`,
+      `issue:key:${updated.key}`,
+    ]);
 
     return decorateUserMeta(updated);
   }
@@ -543,6 +560,10 @@ export class IssuesService {
     }
 
     void this.fireIssueWebhook('issue.moved', updated, userId);
+    void this.cacheTags.invalidateTags([
+      `issue:id:${issueId}`,
+      `issue:key:${updated.key}`,
+    ]);
 
     return decorateUserMeta(updated);
   }
@@ -551,6 +572,10 @@ export class IssuesService {
     const issue = await this.findById(issueId, userId);
     const result = await this.prisma.issue.delete({ where: { id: issueId } });
     void this.fireIssueWebhook('issue.deleted', issue, userId);
+    void this.cacheTags.invalidateTags([
+      `issue:id:${issueId}`,
+      `issue:key:${issue.key}`,
+    ]);
     return result;
   }
 

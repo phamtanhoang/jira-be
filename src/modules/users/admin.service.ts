@@ -1,5 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { LogLevel, Prisma } from '@prisma/client';
+import type { Cache } from 'cache-manager';
 import { ENV, MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { MailService } from '@/core/mail/mail.service';
@@ -39,6 +41,7 @@ export class AdminService {
     private prisma: PrismaService,
     private audit: AdminAuditService,
     private mail: MailService,
+    @Inject(CACHE_MANAGER) private cache: Cache,
   ) {}
 
   async getStats() {
@@ -569,7 +572,45 @@ export class AdminService {
       }
     };
 
-    const [db, supabase] = await Promise.all([dbProbe(), supabaseProbe()]);
+    const cacheProbe = async (): Promise<{
+      configured: boolean;
+      ok: boolean;
+      latencyMs: number;
+      mode: 'redis' | 'memory' | 'disabled';
+      error?: string;
+    }> => {
+      const t = Date.now();
+      if (ENV.CACHE_DISABLED) {
+        return { configured: false, ok: true, latencyMs: 0, mode: 'disabled' };
+      }
+      const mode: 'redis' | 'memory' = ENV.REDIS_URL ? 'redis' : 'memory';
+      try {
+        const probeKey = '__health_probe__';
+        await this.cache.set(probeKey, '1', 1000);
+        const v = await this.cache.get<string>(probeKey);
+        await this.cache.del(probeKey);
+        return {
+          configured: true,
+          ok: v === '1',
+          latencyMs: Date.now() - t,
+          mode,
+        };
+      } catch (err) {
+        return {
+          configured: true,
+          ok: false,
+          latencyMs: Date.now() - t,
+          mode,
+          error: String(err),
+        };
+      }
+    };
+
+    const [db, supabase, cache] = await Promise.all([
+      dbProbe(),
+      supabaseProbe(),
+      cacheProbe(),
+    ]);
 
     const mem = process.memoryUsage();
     const memoryMB = Math.round((mem.rss / 1024 / 1024) * 10) / 10;
@@ -584,6 +625,7 @@ export class AdminService {
         from: ENV.MAIL_FROM || null,
       },
       supabase,
+      cache,
       sentry: {
         configured: !!ENV.SENTRY_DSN,
         active: !!ENV.SENTRY_DSN && ENV.IS_PRODUCTION,
@@ -594,6 +636,50 @@ export class AdminService {
         memoryMB,
         env: ENV.NODE_ENV,
       },
+    };
+  }
+
+  /**
+   * Lightweight public health check for external uptime monitors. Doesn't
+   * leak secrets, runtime details, or auth-required data — just enough to
+   * say "service is alive".
+   *
+   * Status semantics:
+   * - "ok"        — DB reachable; if cache is configured it must also be ok.
+   * - "degraded"  — DB ok, cache configured but failing (still serving traffic).
+   * - "down"      — DB unreachable. Caller treats as failure.
+   */
+  async getPublicHealth(): Promise<{
+    status: 'ok' | 'degraded' | 'down';
+    timestamp: string;
+    uptimeSec: number;
+    db: 'ok' | 'down';
+    cache: 'ok' | 'down' | 'disabled';
+  }> {
+    const dbOk = await this.prisma.$queryRaw`SELECT 1`
+      .then(() => true)
+      .catch(() => false);
+
+    let cacheStatus: 'ok' | 'down' | 'disabled' = 'disabled';
+    if (!ENV.CACHE_DISABLED) {
+      cacheStatus = await this.cache
+        .set('__health_probe_pub__', '1', 1000)
+        .then(() => 'ok' as const)
+        .catch(() => 'down' as const);
+    }
+
+    const status: 'ok' | 'degraded' | 'down' = !dbOk
+      ? 'down'
+      : cacheStatus === 'down'
+        ? 'degraded'
+        : 'ok';
+
+    return {
+      status,
+      timestamp: new Date().toISOString(),
+      uptimeSec: Math.round(process.uptime()),
+      db: dbOk ? 'ok' : 'down',
+      cache: cacheStatus,
     };
   }
 

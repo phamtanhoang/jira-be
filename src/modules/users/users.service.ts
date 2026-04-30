@@ -181,4 +181,62 @@ export class UsersService {
     });
     if (!exists) throw new NotFoundException(MSG.ERROR.USER_NOT_FOUND);
   }
+
+  /**
+   * Public-ish profile for a user, viewable by anyone they share at least
+   * one workspace with. Used by the @mention click-through and any future
+   * "user card" UI. Strips fields that aren't safe to surface across the
+   * tenancy boundary (role, deactivatedAt, deletionRequestedAt).
+   *
+   * Privacy gate: viewer + target must share a workspace. Otherwise 404
+   * (not 403 — don't disclose existence to outsiders).
+   */
+  async getProfile(targetId: string, viewerId: string) {
+    if (targetId === viewerId) {
+      // Self-view is always allowed and skips the workspace probe.
+      const self = await this.prisma.user.findUnique({
+        where: { id: targetId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+          createdAt: true,
+        },
+      });
+      if (!self) throw new NotFoundException(MSG.ERROR.USER_NOT_FOUND);
+      return { ...self, sharedWorkspacesCount: 0, isSelf: true };
+    }
+
+    // Privacy gate: viewer must be in at least one workspace where target is
+    // also a member. We grab the count of overlapping workspaces in the same
+    // round-trip — cheap, and the FE can show "X shared workspaces".
+    const sharedWorkspacesCount = await this.prisma.workspace.count({
+      where: {
+        AND: [
+          { members: { some: { userId: viewerId } } },
+          { members: { some: { userId: targetId } } },
+        ],
+      },
+    });
+
+    if (sharedWorkspacesCount === 0) {
+      // Don't leak existence to a stranger.
+      throw new NotFoundException(MSG.ERROR.USER_NOT_FOUND);
+    }
+
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+        createdAt: true,
+      },
+    });
+    if (!target) throw new NotFoundException(MSG.ERROR.USER_NOT_FOUND);
+
+    return { ...target, sharedWorkspacesCount, isSelf: false };
+  }
 }

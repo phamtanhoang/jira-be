@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { CacheTagsService } from '@/core/cache/cache-tags.service';
 import { MSG, SETTING_KEYS } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { MailService } from '@/core/mail/mail.service';
@@ -19,15 +20,24 @@ export class SettingsService {
     private prisma: PrismaService,
     private mail: MailService,
     private audit: AdminAuditService,
+    private cacheTags: CacheTagsService,
   ) {}
 
   async getAppInfo() {
-    const setting = await this.prisma.setting.findUnique({
-      where: { key: SETTING_KEYS.APP_INFO },
-    });
-    if (!setting) throw new NotFoundException(MSG.ERROR.APP_INFO_NOT_FOUND);
-
-    return setting.value;
+    // Public + read on every page load (logo, app name) — high TTL since
+    // admin edits are rare. Invalidated by `setByKey` + `uploadAppLogo`.
+    return this.cacheTags.wrap(
+      `setting:${SETTING_KEYS.APP_INFO}`,
+      ['settings'],
+      async () => {
+        const setting = await this.prisma.setting.findUnique({
+          where: { key: SETTING_KEYS.APP_INFO },
+        });
+        if (!setting) throw new NotFoundException(MSG.ERROR.APP_INFO_NOT_FOUND);
+        return setting.value;
+      },
+      /* ttlSec */ 600,
+    );
   }
 
   /**
@@ -163,6 +173,7 @@ export class SettingsService {
       targetType: 'Setting',
       payload: { logoUrl: url },
     });
+    void this.cacheTags.invalidateTag('settings');
     return { message: MSG.SUCCESS.SETTINGS_UPDATED, logoUrl: url };
   }
 
@@ -193,6 +204,8 @@ export class SettingsService {
       target: key,
       targetType: 'Setting',
     });
+
+    void this.cacheTags.invalidateTag('settings');
 
     if (key === SETTING_KEYS.APP_EMAIL) {
       return { ...row, value: redactAppEmail(row.value) };

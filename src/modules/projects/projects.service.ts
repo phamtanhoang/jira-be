@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ProjectRole } from '@prisma/client';
+import { CacheTagsService } from '@/core/cache/cache-tags.service';
 import { MSG, USER_SELECT_FULL } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import {
@@ -35,6 +36,7 @@ export class ProjectsService {
     private audit: AdminAuditService,
     private settings: SettingsService,
     private projectsRepository: ProjectsRepository,
+    private cacheTags: CacheTagsService,
   ) {}
 
   async create(userId: string, dto: CreateProjectDto) {
@@ -84,6 +86,8 @@ export class ProjectsService {
       project.type,
     );
 
+    // Project list per user is cached by workspace tag.
+    void this.cacheTags.invalidateTag(`workspace:${dto.workspaceId}`);
     return project;
   }
 
@@ -96,11 +100,16 @@ export class ProjectsService {
     // Workspace OWNER/ADMIN see everything. Other roles (MEMBER/VIEWER) see only
     // projects they are a member of. Repository encapsulates the conditional
     // `where` clause.
-    return this.projectsRepository.findAllByWorkspaceForUser({
-      workspaceId,
-      userId,
-      wsRole: wsMember.role,
-    });
+    return this.cacheTags.wrap(
+      `proj:list:ws:${workspaceId}:user:${userId}`,
+      [`workspace:${workspaceId}`, `user:${userId}`],
+      () =>
+        this.projectsRepository.findAllByWorkspaceForUser({
+          workspaceId,
+          userId,
+          wsRole: wsMember.role,
+        }),
+    );
   }
 
   async findById(projectId: string, userId: string) {
@@ -142,7 +151,7 @@ export class ProjectsService {
       ProjectRole.ADMIN,
     ]);
 
-    return this.prisma.project.update({
+    const updated = await this.prisma.project.update({
       where: { id: project.id },
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
@@ -154,6 +163,8 @@ export class ProjectsService {
         }),
       },
     });
+    void this.cacheTags.invalidateTag(`workspace:${project.workspaceId}`);
+    return updated;
   }
 
   async delete(projectId: string, userId: string) {
@@ -172,6 +183,7 @@ export class ProjectsService {
         workspaceId: project.workspaceId,
       },
     });
+    void this.cacheTags.invalidateTag(`workspace:${project.workspaceId}`);
     return deleted;
   }
 
@@ -201,7 +213,7 @@ export class ProjectsService {
     if (existing)
       throw new BadRequestException(MSG.ERROR.ALREADY_PROJECT_MEMBER);
 
-    return this.prisma.projectMember.create({
+    const created = await this.prisma.projectMember.create({
       data: {
         projectId,
         userId: targetUser.id,
@@ -209,6 +221,9 @@ export class ProjectsService {
       },
       include: { user: USER_SELECT_FULL },
     });
+    // Project list visibility depends on membership for non-admin users.
+    void this.cacheTags.invalidateTag(`workspace:${project.workspaceId}`);
+    return created;
   }
 
   /**
@@ -264,6 +279,10 @@ export class ProjectsService {
       where: { projectId, userId: { in: toAdd } },
       include: { user: USER_SELECT_FULL },
     });
+
+    if (added.length > 0) {
+      void this.cacheTags.invalidateTag(`workspace:${project.workspaceId}`);
+    }
 
     return {
       added: added.length,
