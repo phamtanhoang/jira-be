@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { SprintStatus, StatusCategory } from '@prisma/client';
 import { MSG } from '@/core/constants';
+import { DAY_MS } from '@/core/constants/time.constant';
 import { PrismaService } from '@/core/database/prisma.service';
 import { assertProjectAccess } from '@/core/utils';
 import { CreateSprintDto, UpdateSprintDto } from './dto';
@@ -91,7 +92,7 @@ export class SprintsService {
 
     const dayKeys: string[] = [];
     for (let i = 0; i < days; i++) {
-      const d = new Date(since.getTime() + i * 24 * 60 * 60 * 1000);
+      const d = new Date(since.getTime() + i * DAY_MS);
       dayKeys.push(d.toISOString().slice(0, 10));
     }
 
@@ -232,7 +233,7 @@ export class SprintsService {
     // Build daily burndown
     const totalDays = Math.max(
       1,
-      Math.ceil((endDate.getTime() - startDate.getTime()) / 86400000),
+      Math.ceil((endDate.getTime() - startDate.getTime()) / DAY_MS),
     );
     const pointsPerDay = totalPoints / totalDays;
 

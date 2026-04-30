@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { parseStringArray } from '@/core/utils/parse-json-storage.util';
 import { ProjectsService } from '@/modules/projects/projects.service';
 import { CreateCustomFieldDto, UpdateCustomFieldDto } from './dto';
 
@@ -126,23 +127,26 @@ export class CustomFieldsService {
     });
     const defMap = new Map(defs.map((d) => [d.id, d]));
 
-    for (const [fieldId, raw] of Object.entries(values)) {
-      const def = defMap.get(fieldId);
-      if (!def) continue;
-      const data = this.toValueColumns(def, raw);
-      if (data === null) {
-        // Null/empty → delete the row (treat as "clear value").
-        await this.prisma.customFieldValue
-          .deleteMany({ where: { fieldId, issueId } })
-          .catch(() => null);
-        continue;
-      }
-      await this.prisma.customFieldValue.upsert({
-        where: { fieldId_issueId: { fieldId, issueId } },
-        create: { fieldId, issueId, ...data },
-        update: data,
-      });
-    }
+    // Run all upserts/deletes concurrently. Each row is a separate
+    // primary-key write — Postgres handles them independently, so
+    // sequential awaits were just stacking network round-trips.
+    await Promise.all(
+      Object.entries(values).map(([fieldId, raw]) => {
+        const def = defMap.get(fieldId);
+        if (!def) return Promise.resolve();
+        const data = this.toValueColumns(def, raw);
+        if (data === null) {
+          return this.prisma.customFieldValue
+            .deleteMany({ where: { fieldId, issueId } })
+            .catch(() => null);
+        }
+        return this.prisma.customFieldValue.upsert({
+          where: { fieldId_issueId: { fieldId, issueId } },
+          create: { fieldId, issueId, ...data },
+          update: data,
+        });
+      }),
+    );
   }
 
   // ─── Internals ──────────────────────────────────────────
@@ -211,13 +215,13 @@ export class CustomFieldsService {
       }
       case CustomFieldType.SELECT: {
         const v = typeof raw === 'string' ? raw : JSON.stringify(raw);
-        const allowed = def.options as unknown as string[];
+        const allowed = parseStringArray(def.options);
         if (!allowed.includes(v)) return null;
         return { ...empty, valueSelect: [v] };
       }
       case CustomFieldType.MULTI_SELECT: {
         if (!Array.isArray(raw)) return null;
-        const allowed = new Set(def.options as unknown as string[]);
+        const allowed = new Set(parseStringArray(def.options));
         const filtered = raw
           .map((v) => String(v))
           .filter((v) => allowed.has(v));

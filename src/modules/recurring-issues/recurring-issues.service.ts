@@ -20,6 +20,35 @@ import {
 const MANAGE_ROLES: ProjectRole[] = [ProjectRole.LEAD, ProjectRole.ADMIN];
 
 /**
+ * Narrow runtime type guard for `RecurringIssueRule.template` JSON column.
+ * Templates are validated by class-validator on write (RecurringTemplateDto),
+ * but the read-side has no compile-time guarantee — a malformed row from
+ * manual SQL or schema drift would otherwise break the cron silently.
+ * Returns `null` for malformed input so the caller can skip the rule.
+ */
+function parseTemplate(raw: Prisma.JsonValue): RecurringTemplateDto | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.summary !== 'string' || obj.summary.length === 0) return null;
+  return {
+    summary: obj.summary,
+    description:
+      typeof obj.description === 'string' ? obj.description : undefined,
+    type:
+      typeof obj.type === 'string' ? (obj.type as IssueType) : undefined,
+    priority:
+      typeof obj.priority === 'string'
+        ? (obj.priority as IssuePriority)
+        : undefined,
+    assigneeId:
+      typeof obj.assigneeId === 'string' ? obj.assigneeId : undefined,
+    labelIds: Array.isArray(obj.labelIds)
+      ? obj.labelIds.filter((s): s is string => typeof s === 'string')
+      : undefined,
+  };
+}
+
+/**
  * Recurring issue rules — every hour the cron picks rules whose
  * `nextRunAt <= now()` and creates an issue from the template.
  *
@@ -140,7 +169,8 @@ export class RecurringIssuesService {
           `recurring rule ${rule.id} failed to spawn: ${String(err)}`,
         );
         // Push next run forward anyway so a broken rule doesn't fire
-        // every hour forever.
+        // every hour forever. If THIS update also fails the rule will keep
+        // retrying — log loudly so an admin can intervene.
         await this.prisma.recurringIssueRule
           .update({
             where: { id: rule.id },
@@ -153,7 +183,11 @@ export class RecurringIssuesService {
               ),
             },
           })
-          .catch(() => null);
+          .catch((err) =>
+            this.logger.error(
+              `recurring rule ${rule.id} nextRunAt advance failed — rule will retry every cron tick: ${err instanceof Error ? err.message : String(err)}`,
+            ),
+          );
       }
     }
     this.logger.log(
@@ -168,7 +202,13 @@ export class RecurringIssuesService {
     projectId: string;
     template: Prisma.JsonValue;
   }) {
-    const tmpl = rule.template as unknown as RecurringTemplateDto;
+    const tmpl = parseTemplate(rule.template);
+    if (!tmpl) {
+      this.logger.warn(
+        `recurring rule ${rule.id} has malformed template — skipping spawn`,
+      );
+      return;
+    }
     const project = await this.prisma.project.findUnique({
       where: { id: rule.projectId },
       include: {

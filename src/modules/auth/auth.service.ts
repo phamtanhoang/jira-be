@@ -82,15 +82,19 @@ export class AuthService {
 
     const otp = generateOTP();
 
-    await this.prisma.verificationToken.create({
-      data: {
-        userId: user.id,
-        token: otp,
-        expires: calculateExpiryDate(ENV.TOKEN_VERIFY_EXPIRY),
-      },
-    });
-
-    await this.mail.sendVerificationEmail(dto.email, otp);
+    // Token row + verification email are independent of each other —
+    // run them in parallel to shave ~30-50ms off the register response.
+    // Mail send wraps its own try/catch and never throws.
+    await Promise.all([
+      this.prisma.verificationToken.create({
+        data: {
+          userId: user.id,
+          token: otp,
+          expires: calculateExpiryDate(ENV.TOKEN_VERIFY_EXPIRY),
+        },
+      }),
+      this.mail.sendVerificationEmail(dto.email, otp),
+    ]);
 
     return {
       message: MSG.SUCCESS.REGISTER,

@@ -1,4 +1,4 @@
-import { Inject, Injectable, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import {
   ActivityAction,
   IssueLinkType,
@@ -15,6 +15,7 @@ import {
   IssueNotFoundException,
   ProjectNotFoundException,
 } from '@/core/exceptions';
+import { WEEK_MS } from '@/core/constants/time.constant';
 import { newMentions, sanitizeRichHtml } from '@/core/utils';
 import { CustomFieldsService } from '@/modules/custom-fields/custom-fields.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
@@ -48,6 +49,8 @@ import { IssuesWatchersService } from './services/issues-watchers.service';
  */
 @Injectable()
 export class IssuesService {
+  private readonly logger = new Logger(IssuesService.name);
+
   constructor(
     private prisma: PrismaService,
     private workspacesService: WorkspacesService,
@@ -148,11 +151,15 @@ export class IssuesService {
 
       // Apply custom field values if the payload includes them. Best-effort:
       // a bad fieldId or wrong-type value is silently dropped rather than
-      // failing the whole issue create.
+      // failing the whole issue create. Log so admins can spot regressions.
       if (dto.customFields) {
         await this.customFields
           .applyCustomFieldValues(issue.id, project.id, dto.customFields)
-          .catch(() => null);
+          .catch((err) =>
+            this.logger.warn(
+              `applyCustomFieldValues (create issue=${issue.id}) failed: ${err instanceof Error ? err.message : String(err)}`,
+            ),
+          );
       }
 
       void this.fireIssueWebhook('issue.created', issue, userId);
@@ -260,10 +267,8 @@ export class IssuesService {
 
   async findMyDashboard(userId: string) {
     const now = new Date();
-    const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const recentActivityCutoff = new Date(
-      now.getTime() - 7 * 24 * 60 * 60 * 1000,
-    );
+    const in7Days = new Date(now.getTime() + WEEK_MS);
+    const recentActivityCutoff = new Date(now.getTime() - WEEK_MS);
 
     // Parallelize the two findMany calls — they're independent, so running
     // them sequentially would add a full round-trip of latency for no reason.
@@ -484,7 +489,11 @@ export class IssuesService {
     if (dto.customFields) {
       await this.customFields
         .applyCustomFieldValues(issueId, issue.projectId, dto.customFields)
-        .catch(() => null);
+        .catch((err) =>
+          this.logger.warn(
+            `applyCustomFieldValues (update issue=${issueId}) failed: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
     }
 
     void this.fireIssueWebhook('issue.updated', updated, userId);
@@ -648,7 +657,12 @@ export class IssuesService {
         where: { id: issue.projectId },
         select: { workspaceId: true },
       })
-      .catch(() => null);
+      .catch((err) => {
+        this.logger.warn(
+          `webhook fanout: project lookup failed for issue=${issue.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return null;
+      });
     if (!project) return;
     this.webhooks.dispatch(project.workspaceId, event, {
       issue: {

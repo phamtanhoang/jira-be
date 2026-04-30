@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { LogLevel, Prisma } from '@prisma/client';
 import {
   DAY_MS,
@@ -43,6 +43,8 @@ type HourlyErrorRow = { bucket: Date; count: bigint };
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private prisma: PrismaService,
     private audit: AdminAuditService,
@@ -687,7 +689,11 @@ export class AdminService {
           html,
           type: 'OTHER',
         })
-        .catch(() => null);
+        .catch((err) =>
+          this.logger.warn(
+            `bulk-invite mail to ${email} failed: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
     }
 
     return {
