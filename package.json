@@ -22,7 +22,7 @@
     "test:run": "jest --config ./test/jest-unit.json",
     "test:cov": "jest --config ./test/jest-unit.json --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "lint-staged": {
     "*.ts": [
