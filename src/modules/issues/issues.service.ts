@@ -9,13 +9,13 @@ import {
   WorkspaceRole,
 } from '@prisma/client';
 import { CacheTagsService } from '@/core/cache/cache-tags.service';
+import { WEEK_MS } from '@/core/constants/time.constant';
 import { PrismaService } from '@/core/database/prisma.service';
 import {
   ColumnNotFoundException,
   IssueNotFoundException,
   ProjectNotFoundException,
 } from '@/core/exceptions';
-import { WEEK_MS } from '@/core/constants/time.constant';
 import { newMentions, sanitizeRichHtml } from '@/core/utils';
 import { CustomFieldsService } from '@/modules/custom-fields/custom-fields.service';
 import { NotificationsService } from '@/modules/notifications/notifications.service';

@@ -34,14 +34,12 @@ function parseTemplate(raw: Prisma.JsonValue): RecurringTemplateDto | null {
     summary: obj.summary,
     description:
       typeof obj.description === 'string' ? obj.description : undefined,
-    type:
-      typeof obj.type === 'string' ? (obj.type as IssueType) : undefined,
+    type: typeof obj.type === 'string' ? (obj.type as IssueType) : undefined,
     priority:
       typeof obj.priority === 'string'
         ? (obj.priority as IssuePriority)
         : undefined,
-    assigneeId:
-      typeof obj.assigneeId === 'string' ? obj.assigneeId : undefined,
+    assigneeId: typeof obj.assigneeId === 'string' ? obj.assigneeId : undefined,
     labelIds: Array.isArray(obj.labelIds)
       ? obj.labelIds.filter((s): s is string => typeof s === 'string')
       : undefined,
