@@ -147,11 +147,9 @@ describe('CustomFieldsService.applyCustomFieldValues()', () => {
 
     const callOrder: string[] = [];
     prisma.customFieldValue.upsert.mockImplementation(
-      async (args: {
-        where: { fieldId_issueId: { fieldId: string } };
-      }) => {
+      (args: { where: { fieldId_issueId: { fieldId: string } } }) => {
         callOrder.push(args.where.fieldId_issueId.fieldId);
-        return {};
+        return Promise.resolve({});
       },
     );
 
