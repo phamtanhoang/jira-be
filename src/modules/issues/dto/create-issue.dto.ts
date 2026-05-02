@@ -4,6 +4,7 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsDefined,
   IsNotEmpty,
   IsObject,
   IsOptional,
@@ -14,11 +15,13 @@ import {
 
 export class CreateIssueDto {
   @ApiProperty({ example: 'project-uuid' })
+  @IsDefined()
   @IsString()
   @IsNotEmpty()
   projectId!: string;
 
   @ApiProperty({ example: 'Implement login page' })
+  @IsDefined()
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)

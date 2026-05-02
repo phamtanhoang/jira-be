@@ -3,6 +3,7 @@ import { IssuePriority } from '@prisma/client';
 import {
   IsArray,
   IsEnum,
+  IsDefined,
   IsOptional,
   IsString,
   ArrayMinSize,
@@ -10,6 +11,7 @@ import {
 
 export class BulkUpdateIssueDto {
   @ApiProperty({ example: ['uuid-1', 'uuid-2'] })
+  @IsDefined()
   @IsArray()
   @IsString({ each: true })
   @ArrayMinSize(1)
@@ -33,6 +35,7 @@ export class BulkUpdateIssueDto {
 
 export class BulkDeleteIssueDto {
   @ApiProperty({ example: ['uuid-1', 'uuid-2'] })
+  @IsDefined()
   @IsArray()
   @IsString({ each: true })
   @ArrayMinSize(1)

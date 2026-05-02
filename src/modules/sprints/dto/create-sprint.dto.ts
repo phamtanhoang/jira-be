@@ -4,16 +4,19 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsDefined,
   MaxLength,
 } from 'class-validator';
 
 export class CreateSprintDto {
   @ApiProperty({ example: 'board-uuid' })
+  @IsDefined()
   @IsString()
   @IsNotEmpty()
   boardId!: string;
 
   @ApiProperty({ example: 'Sprint 1' })
+  @IsDefined()
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)

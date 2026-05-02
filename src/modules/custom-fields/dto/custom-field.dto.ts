@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsDefined,
   IsEnum,
   IsInt,
   IsOptional,
@@ -17,16 +18,19 @@ import {
 
 export class CreateCustomFieldDto {
   @ApiProperty({ format: 'uuid' })
+  @IsDefined()
   @IsUUID()
   projectId!: string;
 
   @ApiProperty({ example: 'Team' })
+  @IsDefined()
   @IsString()
   @MinLength(1)
   @MaxLength(60)
   name!: string;
 
   @ApiProperty({ enum: CustomFieldType })
+  @IsDefined()
   @IsEnum(CustomFieldType)
   type!: CustomFieldType;
 
