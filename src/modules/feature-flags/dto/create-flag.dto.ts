@@ -4,6 +4,7 @@ import { Transform } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsDefined,
   IsInt,
   IsObject,
   IsOptional,
@@ -38,6 +39,7 @@ export class FlagConditions {
 
 export class CreateFlagDto {
   @ApiProperty({ example: 'beta_boards' })
+  @IsDefined()
   @IsString()
   @MinLength(1)
   @MaxLength(80)
@@ -47,6 +49,7 @@ export class CreateFlagDto {
   key!: string;
 
   @ApiProperty({ example: 'Beta boards' })
+  @IsDefined()
   @IsString()
   @MinLength(1)
   @MaxLength(120)

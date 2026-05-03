@@ -4,6 +4,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsDefined,
   IsEnum,
   IsInt,
   IsObject,
@@ -19,6 +20,7 @@ import {
 
 export class RecurringTemplateDto {
   @ApiProperty({ example: 'Weekly status report' })
+  @IsDefined()
   @IsString()
   @MinLength(1)
   @MaxLength(255)
@@ -53,16 +55,19 @@ export class RecurringTemplateDto {
 
 export class CreateRecurringRuleDto {
   @ApiProperty({ format: 'uuid' })
+  @IsDefined()
   @IsUUID()
   projectId!: string;
 
   @ApiProperty()
+  @IsDefined()
   @IsString()
   @MinLength(1)
   @MaxLength(80)
   name!: string;
 
   @ApiProperty({ enum: RecurringFrequency })
+  @IsDefined()
   @IsEnum(RecurringFrequency)
   frequency!: RecurringFrequency;
 
@@ -75,6 +80,7 @@ export class CreateRecurringRuleDto {
   hour?: number;
 
   @ApiProperty({ type: RecurringTemplateDto })
+  @IsDefined()
   @IsObject()
   @ValidateNested()
   @Type(() => RecurringTemplateDto)

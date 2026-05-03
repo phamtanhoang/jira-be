@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsDefined,
   IsInt,
   IsOptional,
   IsString,
@@ -12,6 +13,7 @@ import {
 
 export class CreatePatDto {
   @ApiProperty({ example: 'ci-bot' })
+  @IsDefined()
   @IsString()
   @MinLength(1)
   @MaxLength(60)

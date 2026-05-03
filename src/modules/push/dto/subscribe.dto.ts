@@ -1,11 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsObject, IsOptional, IsString } from 'class-validator';
+import { IsDefined, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class SubscribePushDto {
   @ApiProperty({
     description:
       'Web Push API subscription object — pass result of `pushManager.subscribe()` directly.',
   })
+  @IsDefined()
   @IsObject()
   subscription!: {
     endpoint: string;
@@ -20,6 +21,7 @@ export class SubscribePushDto {
 
 export class UnsubscribePushDto {
   @ApiProperty()
+  @IsDefined()
   @IsString()
   endpoint!: string;
 }

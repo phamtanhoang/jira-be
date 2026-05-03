@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsDefined,
   IsEnum,
   IsOptional,
   IsUUID,
@@ -15,6 +16,7 @@ export class BulkAddProjectMembersDto {
     description: 'Workspace member user IDs to add to the project',
     example: ['b3f...', 'c2d...'],
   })
+  @IsDefined()
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(50)

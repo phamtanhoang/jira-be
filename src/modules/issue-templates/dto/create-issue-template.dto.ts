@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IssuePriority, IssueType } from '@prisma/client';
 import {
   IsArray,
+  IsDefined,
   IsEnum,
   IsOptional,
   IsString,
@@ -11,10 +12,12 @@ import {
 
 export class CreateIssueTemplateDto {
   @ApiProperty()
+  @IsDefined()
   @IsString()
   projectId!: string;
 
   @ApiProperty({ example: 'Bug template' })
+  @IsDefined()
   @IsString()
   @MinLength(1)
   @MaxLength(80)

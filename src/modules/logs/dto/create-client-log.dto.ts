@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { LogLevel } from '@prisma/client';
 import {
   IsArray,
+  IsDefined,
   IsEnum,
   IsInt,
   IsObject,
@@ -11,10 +12,12 @@ import {
 
 export class CreateClientLogDto {
   @ApiProperty({ enum: LogLevel })
+  @IsDefined()
   @IsEnum(LogLevel)
   level!: LogLevel;
 
   @ApiProperty()
+  @IsDefined()
   @IsString()
   url!: string;
 

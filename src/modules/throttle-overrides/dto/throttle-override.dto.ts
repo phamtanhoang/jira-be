@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
+  IsDefined,
   IsNumber,
   IsOptional,
   IsString,
@@ -20,6 +21,7 @@ export class CreateThrottleOverrideDto {
     description:
       'Target tracker key — `user:UUID` for an authenticated user, `ip:ADDR` for an anonymous IP',
   })
+  @IsDefined()
   @IsString()
   @Matches(TARGET_PATTERN, {
     message: 'target must match `user:UUID` or `ip:ADDR`',

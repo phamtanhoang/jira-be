@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsDefined,
   IsEmail,
   IsOptional,
   IsString,
@@ -11,6 +12,7 @@ import {
 
 export class BulkInviteDto {
   @ApiProperty({ type: [String], example: ['a@example.com', 'b@example.com'] })
+  @IsDefined()
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(500)

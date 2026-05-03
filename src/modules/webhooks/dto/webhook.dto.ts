@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsDefined,
   IsOptional,
   IsString,
   IsUrl,
@@ -24,6 +25,7 @@ export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 
 export class CreateWebhookDto {
   @ApiProperty({ example: 'production-deploy-bot' })
+  @IsDefined()
   @IsString()
   @MinLength(1)
   @MaxLength(80)
@@ -34,6 +36,7 @@ export class CreateWebhookDto {
     description:
       'Receiver URL. URLs matching hooks.slack.com are auto-formatted to Slack attachment payloads.',
   })
+  @IsDefined()
   @IsUrl({ require_tld: false, require_protocol: true })
   url!: string;
 
@@ -41,6 +44,7 @@ export class CreateWebhookDto {
     type: [String],
     example: ['issue.created', 'comment.created'],
   })
+  @IsDefined()
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(20)
