@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDefined, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsDefined,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateLabelDto {
   @ApiProperty({ example: 'project-uuid' })
