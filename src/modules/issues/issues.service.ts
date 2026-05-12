@@ -187,6 +187,9 @@ export class IssuesService {
       //   MULTI_SELECT → string OR string[] (any of the values must match)
       // Unknown fieldIds are silently ignored.
       customFields?: Record<string, string | string[]>;
+      // Match issues having ANY of these label IDs (OR semantics). Empty
+      // array is treated as "no filter" — same as undefined.
+      labelIds?: string[];
     },
   ) {
     const project = await this.prisma.project.findUnique({
@@ -229,6 +232,10 @@ export class IssuesService {
           },
         ],
       }),
+      ...(filters?.labelIds &&
+        filters.labelIds.length > 0 && {
+          labels: { some: { labelId: { in: filters.labelIds } } },
+        }),
       ...(customFieldClauses.length > 0 && { AND: customFieldClauses }),
     };
 

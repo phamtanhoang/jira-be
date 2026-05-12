@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -11,7 +12,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ENDPOINTS, MSG } from '@/core/constants';
 import { CurrentUser } from '@/core/decorators';
 import { AuthUser } from '@/core/types';
-import { CreateLabelDto } from './dto';
+import { CreateLabelDto, UpdateLabelDto } from './dto';
 import { LabelsService } from './labels.service';
 
 const E = ENDPOINTS.LABELS;
@@ -35,6 +36,17 @@ export class LabelsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.labelsService.findAllByProject(projectId, user.id);
+  }
+
+  @Patch(E.BY_ID)
+  @ApiOperation({ summary: 'Rename / recolor a label' })
+  async update(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdateLabelDto,
+  ) {
+    const label = await this.labelsService.update(id, user.id, dto);
+    return { message: MSG.SUCCESS.LABEL_UPDATED, label };
   }
 
   @Delete(E.BY_ID)

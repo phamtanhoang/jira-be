@@ -56,6 +56,7 @@ export class IssuesController {
     @Query('cursor') cursor: string,
     @Query('take') take: string,
     @Query('customFields') customFields: string,
+    @Query('labelIds') labelIds: string,
     @CurrentUser() user: AuthUser,
   ) {
     return this.issuesService.findAll(projectId, user.id, {
@@ -67,6 +68,14 @@ export class IssuesController {
       cursor,
       take: take ? parseInt(take) : undefined,
       customFields: parseCustomFieldsQuery(customFields),
+      // Comma-separated UUIDs. Match issues that have ANY of the labels
+      // (project-scoped board filter intent).
+      labelIds: labelIds
+        ? labelIds
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : undefined,
     });
   }
 
