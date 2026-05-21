@@ -62,7 +62,7 @@ export const UPLOAD_LIMITS = {
     //   so a 1–2 GB RAM VPS doesn't OOM under concurrent finalizations.
     maxSize: 100 * MB,
     chunkSize: 1 * MB,
-    chunkUploadCap: (1 * MB) + 256 * 1024, // 1 MB chunk + multipart envelope headroom
+    chunkUploadCap: 1 * MB + 256 * 1024, // 1 MB chunk + multipart envelope headroom
     sessionTtlMs: 60 * 60 * 1000, // 1 hour
     mimes: [
       'image/jpeg',
