@@ -60,9 +60,14 @@ export const UPLOAD_LIMITS = {
     //   nginx's default `client_max_body_size` of 1 MB. We could push to
     //   ~900 KB but the headroom is worth it to survive any envelope
     //   inflation from form-data fields.
-    // - 100 MB total bounds the in-memory `Buffer.concat` at `complete`
-    //   time so a 1–2 GB RAM VPS doesn't OOM under concurrent finalizations.
-    maxSize: 100 * MB,
+    // - 30 MB total cap is intentional: at `complete` time the service
+    //   holds the full assembled file in memory (Buffer.concat) AND the
+    //   Supabase SDK takes another copy when serializing the upload body,
+    //   so peak RSS ≈ 3× fileSize. On a 4 GB VPS with ~400 MB free under
+    //   load, 30 MB keeps the peak around ~90 MB — comfortably away from
+    //   OOM. Bump this when (a) VPS RAM grows or (b) we migrate to a
+    //   streaming-concat refactor that no longer holds the file whole.
+    maxSize: 30 * MB,
     chunkSize: 512 * 1024,
     chunkUploadCap: 768 * 1024, // 512 KB chunk + plenty of multipart envelope headroom
     sessionTtlMs: 60 * 60 * 1000, // 1 hour
