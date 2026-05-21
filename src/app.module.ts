@@ -17,6 +17,7 @@ import {
 import { SentryService } from '@/core/services/sentry.service';
 import { AdminAuditModule } from '@/modules/admin-audit/admin-audit.module';
 import { AttachmentsModule } from '@/modules/attachments/attachments.module';
+import { AttachmentsLargeModule } from '@/modules/attachments-large/attachments-large.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { BoardsModule } from '@/modules/boards/boards.module';
 import { CommentsModule } from '@/modules/comments/comments.module';
@@ -71,6 +72,7 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     PushModule,
     WorklogsModule,
     AttachmentsModule,
+    AttachmentsLargeModule,
     UsersModule,
     FeatureFlagsModule,
     GdprModule,

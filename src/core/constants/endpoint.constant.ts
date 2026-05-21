@@ -76,6 +76,7 @@ export const ENDPOINTS = {
     LABEL_BY_ID: ':id/labels/:labelId',
     COMMENTS: ':id/comments',
     ATTACHMENTS: ':id/attachments',
+    LARGE_ATTACHMENTS_INIT: ':id/attachments/large/init',
     WORKLOGS: ':id/worklogs',
     ACTIVITY: ':id/activity',
     STAR: ':id/star',
@@ -99,6 +100,10 @@ export const ENDPOINTS = {
   ATTACHMENTS: {
     BASE: 'attachments',
     BY_ID: ':id',
+    LARGE_BASE: 'attachments/large',
+    LARGE_CHUNK: 'attachments/large/:sessionId/chunk',
+    LARGE_COMPLETE: 'attachments/large/:sessionId/complete',
+    LARGE_ABORT: 'attachments/large/:sessionId',
   },
   WORKLOGS: {
     BASE: 'worklogs',

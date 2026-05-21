@@ -93,6 +93,82 @@ export async function createSignedUrl(
   return data.signedUrl;
 }
 
+/**
+ * Upload one piece of an in-progress chunked upload to a temporary path.
+ * The path is namespaced by sessionId so abandoned uploads can be swept
+ * by deleting the whole prefix.
+ */
+export async function uploadChunkObject(
+  sessionId: string,
+  chunkIndex: number,
+  buffer: Buffer,
+): Promise<void> {
+  const supabase = getSupabase();
+  const bucket = getBucket();
+  const path = chunkObjectPath(sessionId, chunkIndex);
+
+  const { error } = await supabase.storage.from(bucket).upload(path, buffer, {
+    contentType: 'application/octet-stream',
+    upsert: true,
+  });
+  if (error) {
+    logger.error(
+      `Supabase chunk upload error (${path}): ${error.message}`,
+      error.stack,
+    );
+    throw new Error(`Chunk upload failed: ${error.message}`);
+  }
+}
+
+/**
+ * Download a previously uploaded chunk back into memory.
+ * Used during `complete` to assemble the final file.
+ */
+export async function downloadChunkObject(
+  sessionId: string,
+  chunkIndex: number,
+): Promise<Buffer> {
+  const supabase = getSupabase();
+  const bucket = getBucket();
+  const path = chunkObjectPath(sessionId, chunkIndex);
+
+  const { data, error } = await supabase.storage.from(bucket).download(path);
+  if (error || !data) {
+    throw new Error(
+      `Chunk download failed (${path}): ${error?.message ?? 'no data'}`,
+    );
+  }
+  const arrayBuffer = await data.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+/**
+ * Best-effort cleanup of every chunk written under a session. Called both
+ * on successful `complete` and on `abort` / TTL expiry. Errors are logged
+ * but never thrown — leftover bytes are wasted storage, not a data bug.
+ */
+export async function deleteChunkObjects(
+  sessionId: string,
+  chunkCount: number,
+): Promise<void> {
+  if (chunkCount <= 0) return;
+  const supabase = getSupabase();
+  const bucket = getBucket();
+  const paths = Array.from({ length: chunkCount }, (_, i) =>
+    chunkObjectPath(sessionId, i),
+  );
+  const { error } = await supabase.storage.from(bucket).remove(paths);
+  if (error)
+    logger.error(
+      `Supabase chunk cleanup error (${sessionId}): ${error.message}`,
+      error.stack,
+    );
+}
+
+function chunkObjectPath(sessionId: string, chunkIndex: number): string {
+  return `temp/${sessionId}/chunk-${String(chunkIndex).padStart(6, '0')}`;
+}
+
 function extractStoragePath(publicUrl: string): string | null {
   const bucket = getBucket();
   // Public URL: https://{project}.supabase.co/storage/v1/object/public/{bucket}/{path}
