@@ -107,17 +107,70 @@ export async function uploadChunkObject(
   const bucket = getBucket();
   const path = chunkObjectPath(sessionId, chunkIndex);
 
-  const { error } = await supabase.storage.from(bucket).upload(path, buffer, {
-    contentType: 'application/octet-stream',
-    upsert: true,
-  });
-  if (error) {
-    logger.error(
-      `Supabase chunk upload error (${path}): ${error.message}`,
-      error.stack,
-    );
-    throw new Error(`Chunk upload failed: ${error.message}`);
+  // Retry the write a few times — Supabase free tier occasionally returns a
+  // success response that doesn't actually persist the object, leaving the
+  // subsequent `complete` step with a phantom "Object not found" error on
+  // /complete despite each chunk POST returning 201. Three attempts with
+  // verification after each is enough to absorb transient consistency
+  // issues without dragging out the happy path materially.
+  const MAX_ATTEMPTS = 3;
+  let lastError: string | null = null;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const { error } = await supabase.storage.from(bucket).upload(path, buffer, {
+      contentType: 'application/octet-stream',
+      upsert: true,
+    });
+    if (error) {
+      lastError = error.message;
+      logger.warn(
+        `Supabase chunk upload attempt ${attempt}/${MAX_ATTEMPTS} failed (${path}): ${error.message}`,
+      );
+    } else {
+      // Verify the object actually landed before reporting success. Without
+      // this we trust Supabase's 200 and only learn it lied minutes later
+      // when /complete tries to download.
+      const verified = await chunkObjectExists(sessionId, chunkIndex);
+      if (verified) return;
+      lastError = 'upload reported success but object not retrievable';
+      logger.warn(
+        `Supabase chunk upload attempt ${attempt}/${MAX_ATTEMPTS} unverified (${path})`,
+      );
+    }
+    // Small backoff between attempts. 100ms · 2 · attempt is enough for
+    // Supabase's edge cache to settle on retry without piling latency.
+    if (attempt < MAX_ATTEMPTS) {
+      await new Promise((r) => setTimeout(r, 200 * attempt));
+    }
   }
+
+  logger.error(
+    `Supabase chunk upload exhausted retries (${path}): ${lastError}`,
+  );
+  throw new Error(`Chunk upload failed: ${lastError}`);
+}
+
+/**
+ * HEAD-style probe — does the chunk exist on the bucket?
+ * Used by `uploadChunkObject` to verify writes that returned success.
+ */
+async function chunkObjectExists(
+  sessionId: string,
+  chunkIndex: number,
+): Promise<boolean> {
+  const supabase = getSupabase();
+  const bucket = getBucket();
+  const path = chunkObjectPath(sessionId, chunkIndex);
+  // `list` with a prefix is the cheapest "does this object exist" query
+  // Supabase exposes — no body transfer, just a directory lookup.
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .list(`temp/${sessionId}`, {
+      limit: 1,
+      search: path.split('/').pop()!,
+    });
+  if (error) return false;
+  return Array.isArray(data) && data.length > 0;
 }
 
 /**
