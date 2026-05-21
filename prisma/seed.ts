@@ -42,6 +42,208 @@ const SETTING_KEYS = {
   APP_EMAIL_TEMPLATES: 'app.email_templates',
 } as const;
 
+// ─── Email template bodies ──────────────────────────────────────────
+// Declared up here so the `SEED` object below can reference them without
+// hitting TS2448 (used before declaration). Table-based layout + inline
+// styles for Gmail/Outlook/Yahoo compatibility. `{{var}}` tokens resolved
+// at send time by `MailService.renderTemplate`.
+
+const VERIFICATION_EMAIL_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verify your email</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#172b4d;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#ffffff;border-radius:12px;box-shadow:0 2px 12px rgba(9,30,66,0.08);overflow:hidden;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#0052cc 0%,#2684ff 100%);padding:28px 40px;text-align:center;">
+              <img src="{{logoUrl}}" alt="{{appName}}" width="36" height="36" style="display:inline-block;vertical-align:middle;margin-right:10px;border:0;border-radius:8px;background:#ffffff;" />
+              <span style="color:#ffffff;font-size:22px;font-weight:700;vertical-align:middle;letter-spacing:-0.3px;">{{appName}}</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 40px 16px;">
+              <h1 style="margin:0 0 12px;font-size:22px;font-weight:600;color:#172b4d;">Verify your email</h1>
+              <p style="margin:0;font-size:14px;line-height:1.6;color:#5e6c84;">
+                Hi, we received a sign-up request for <strong style="color:#172b4d;">{{recipientEmail}}</strong>.
+                Enter the code below to confirm your email address.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:8px 40px 16px;">
+              <div style="display:inline-block;padding:18px 32px;background:#f4f5f7;border-radius:10px;font-family:'SF Mono','Consolas','Courier New',monospace;font-size:32px;font-weight:700;color:#0052cc;letter-spacing:8px;">
+                {{otp}}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 40px 32px;">
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#5e6c84;text-align:center;">
+                This code expires in <strong style="color:#172b4d;">{{expiryMinutes}} minutes</strong>.<br/>
+                If you didn't sign up, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 40px;background:#fafbfc;border-top:1px solid #ebecf0;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#7a869a;">
+                © {{appName}} — automated message, please do not reply.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
+const RESET_PASSWORD_EMAIL_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reset your password</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#172b4d;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#ffffff;border-radius:12px;box-shadow:0 2px 12px rgba(9,30,66,0.08);overflow:hidden;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#de350b 0%,#ff7452 100%);padding:28px 40px;text-align:center;">
+              <img src="{{logoUrl}}" alt="{{appName}}" width="36" height="36" style="display:inline-block;vertical-align:middle;margin-right:10px;border:0;border-radius:8px;background:#ffffff;" />
+              <span style="color:#ffffff;font-size:22px;font-weight:700;vertical-align:middle;letter-spacing:-0.3px;">{{appName}}</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 40px 16px;">
+              <h1 style="margin:0 0 12px;font-size:22px;font-weight:600;color:#172b4d;">Reset your password</h1>
+              <p style="margin:0;font-size:14px;line-height:1.6;color:#5e6c84;">
+                Hi, we received a password reset request for <strong style="color:#172b4d;">{{recipientEmail}}</strong>.
+                Use the code below to set a new password.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:8px 40px 16px;">
+              <div style="display:inline-block;padding:18px 32px;background:#fff4f0;border:1px solid #ffd5c2;border-radius:10px;font-family:'SF Mono','Consolas','Courier New',monospace;font-size:32px;font-weight:700;color:#de350b;letter-spacing:8px;">
+                {{otp}}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 40px 24px;">
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#5e6c84;text-align:center;">
+                This code expires in <strong style="color:#172b4d;">{{expiryMinutes}} minutes</strong>.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 40px 32px;">
+              <div style="padding:14px 16px;background:#fffae6;border:1px solid #ffe380;border-radius:8px;">
+                <p style="margin:0;font-size:13px;line-height:1.5;color:#172b4d;">
+                  <strong>Didn't request this?</strong> Someone may have entered your email by mistake.
+                  Ignore this message — your password stays unchanged. If you keep getting these, contact support.
+                </p>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 40px;background:#fafbfc;border-top:1px solid #ebecf0;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#7a869a;">
+                © {{appName}} — automated message, please do not reply.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
+const WELCOME_EMAIL_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to {{appName}}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#172b4d;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:12px;box-shadow:0 2px 12px rgba(9,30,66,0.08);overflow:hidden;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#00875a 0%,#36b37e 100%);padding:32px 40px;text-align:center;">
+              <img src="{{logoUrl}}" alt="{{appName}}" width="40" height="40" style="display:inline-block;vertical-align:middle;margin-right:12px;border:0;border-radius:8px;background:#ffffff;" />
+              <span style="color:#ffffff;font-size:24px;font-weight:700;vertical-align:middle;letter-spacing:-0.3px;">{{appName}}</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 40px 24px;">
+              <h1 style="margin:0 0 12px;font-size:24px;font-weight:600;color:#172b4d;">Welcome aboard! 🎉</h1>
+              <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#5e6c84;">
+                Hi, your account <strong style="color:#172b4d;">{{recipientEmail}}</strong> is now verified and ready.
+                Here's how to get the most out of {{appName}}:
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 40px 16px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding:12px 0;border-bottom:1px solid #ebecf0;">
+                    <span style="display:inline-block;width:28px;height:28px;line-height:28px;border-radius:50%;background:#deebff;color:#0052cc;font-weight:700;font-size:13px;text-align:center;vertical-align:middle;margin-right:12px;">1</span>
+                    <span style="font-size:14px;color:#172b4d;vertical-align:middle;"><strong>Create your first workspace</strong> — invite teammates, set roles.</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 0;border-bottom:1px solid #ebecf0;">
+                    <span style="display:inline-block;width:28px;height:28px;line-height:28px;border-radius:50%;background:#deebff;color:#0052cc;font-weight:700;font-size:13px;text-align:center;vertical-align:middle;margin-right:12px;">2</span>
+                    <span style="font-size:14px;color:#172b4d;vertical-align:middle;"><strong>Spin up a project</strong> — board, sprints and backlog are auto-created.</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 0;">
+                    <span style="display:inline-block;width:28px;height:28px;line-height:28px;border-radius:50%;background:#deebff;color:#0052cc;font-weight:700;font-size:13px;text-align:center;vertical-align:middle;margin-right:12px;">3</span>
+                    <span style="font-size:14px;color:#172b4d;vertical-align:middle;"><strong>Drag your first issue</strong> across the board — that's the loop.</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:24px 40px 32px;">
+              <a href="https://jira.3hteam.io.vn/dashboard" style="display:inline-block;padding:12px 28px;background:#0052cc;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+                Open dashboard →
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 40px;background:#fafbfc;border-top:1px solid #ebecf0;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#7a869a;">
+                Sent to {{recipientEmail}} · © {{appName}}
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
 /**
  * Defaults dictionary. Shape of each value mirrors the corresponding
  * `*Value` type in `jira-fe/src/features/admin/types.ts` and the BE
@@ -112,13 +314,23 @@ const SEED: Record<string, Prisma.InputJsonValue> = {
     maxStorageGB: 0,
   },
 
-  // Admin-overridable email bodies. Empty subject + html → MailService
-  // falls back to the built-in hardcoded template. Edit via admin UI to
-  // customize.
+  // Admin-overridable email bodies. Each one is a full HTML email with
+  // {{placeholders}} resolved by MailService.renderTemplate (appName,
+  // logoUrl, otp, expiryMinutes, recipientEmail). Empty entries fall back
+  // to the built-in hardcoded template; we ship branded defaults instead.
   [SETTING_KEYS.APP_EMAIL_TEMPLATES]: {
-    verification: { subject: '', html: '' },
-    resetPassword: { subject: '', html: '' },
-    welcome: { subject: '', html: '' },
+    verification: {
+      subject: 'Verify your email — {{appName}}',
+      html: VERIFICATION_EMAIL_HTML,
+    },
+    resetPassword: {
+      subject: 'Reset your password — {{appName}}',
+      html: RESET_PASSWORD_EMAIL_HTML,
+    },
+    welcome: {
+      subject: 'Welcome to {{appName}}!',
+      html: WELCOME_EMAIL_HTML,
+    },
   },
 };
 
