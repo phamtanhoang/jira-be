@@ -174,6 +174,28 @@ async function chunkObjectExists(
 }
 
 /**
+ * Authoritative list of chunk indices that are actually persisted on
+ * Supabase under this session's temp folder. Used by `complete` as a
+ * self-healing check before assembling — if the BE session bookkeeping
+ * thinks all chunks are received but Supabase silently dropped one, we
+ * can hand the missing indices back to the FE for re-upload.
+ */
+export async function listChunkIndices(sessionId: string): Promise<number[]> {
+  const supabase = getSupabase();
+  const bucket = getBucket();
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .list(`temp/${sessionId}`, { limit: 1000 });
+  if (error || !data) return [];
+  const indices: number[] = [];
+  for (const obj of data) {
+    const m = obj.name.match(/^chunk-(\d{6})$/);
+    if (m) indices.push(parseInt(m[1], 10));
+  }
+  return indices;
+}
+
+/**
  * Download a previously uploaded chunk back into memory.
  * Used during `complete` to assemble the final file.
  *

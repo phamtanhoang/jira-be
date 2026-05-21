@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -20,6 +21,7 @@ import {
   assertProjectAccess,
   deleteChunkObjects,
   downloadChunkObject,
+  listChunkIndices,
   uploadChunkObject,
   uploadFile,
 } from '@/core/utils';
@@ -149,6 +151,34 @@ export class AttachmentsLargeService {
 
     if (session.receivedChunks.size !== session.totalChunks) {
       throw new BadRequestException(MSG.ERROR.LARGE_UPLOAD_INCOMPLETE);
+    }
+
+    // Self-heal: list what's actually on Supabase before assembling.
+    // The BE session bookkeeping is best-effort — Supabase free tier
+    // occasionally returns 200 OK on upload but doesn't persist the
+    // object, so `receivedChunks` can think a chunk is there when it
+    // isn't. Hand the FE the missing indices in a 409 response so it
+    // can re-upload only those and call `/complete` again.
+    const present = new Set(await listChunkIndices(sessionId));
+    const missing: number[] = [];
+    for (let i = 0; i < session.totalChunks; i++) {
+      if (!present.has(i)) {
+        missing.push(i);
+        // Keep BE state consistent: forget that we ever received this
+        // chunk so the next `/chunk` call from FE actually re-uploads
+        // (otherwise the `if (!receivedChunks.has(i))` guard might skip
+        // bumping bytesReceived again on duplicate).
+        session.receivedChunks.delete(i);
+      }
+    }
+    if (missing.length > 0) {
+      this.logger.warn(
+        `Session ${sessionId} missing chunks at /complete: [${missing.join(',')}]`,
+      );
+      throw new ConflictException({
+        message: MSG.ERROR.LARGE_UPLOAD_CHUNKS_MISSING,
+        missingChunks: missing,
+      });
     }
 
     // Assemble in memory. Bounded by LARGE_ATTACHMENT.maxSize so the peak
