@@ -176,6 +176,13 @@ async function chunkObjectExists(
 /**
  * Download a previously uploaded chunk back into memory.
  * Used during `complete` to assemble the final file.
+ *
+ * Supabase Storage occasionally returns "Object not found" on a download
+ * for an object that was successfully uploaded seconds earlier — list and
+ * download endpoints sit behind slightly different caches, so a chunk can
+ * appear in `list()` (our upload-time verify) yet still 404 on `download()`
+ * during the same request lifecycle. The retry loop here absorbs that
+ * window without surfacing the failure to the user.
  */
 export async function downloadChunkObject(
   sessionId: string,
@@ -185,14 +192,27 @@ export async function downloadChunkObject(
   const bucket = getBucket();
   const path = chunkObjectPath(sessionId, chunkIndex);
 
-  const { data, error } = await supabase.storage.from(bucket).download(path);
-  if (error || !data) {
-    throw new Error(
-      `Chunk download failed (${path}): ${error?.message ?? 'no data'}`,
-    );
+  const MAX_ATTEMPTS = 4;
+  let lastErrorMessage = 'no data';
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const { data, error } = await supabase.storage.from(bucket).download(path);
+    if (data && !error) {
+      const arrayBuffer = await data.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    }
+    lastErrorMessage = error?.message ?? 'no data';
+    if (attempt < MAX_ATTEMPTS) {
+      logger.warn(
+        `Supabase chunk download attempt ${attempt}/${MAX_ATTEMPTS} failed (${path}): ${lastErrorMessage}`,
+      );
+      // Backoff 500ms · attempt — Supabase eventual consistency usually
+      // resolves within a couple of seconds.
+      await new Promise((r) => setTimeout(r, 500 * attempt));
+    }
   }
-  const arrayBuffer = await data.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+
+  throw new Error(`Chunk download failed (${path}): ${lastErrorMessage}`);
 }
 
 /**
