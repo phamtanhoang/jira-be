@@ -56,13 +56,15 @@ export const UPLOAD_LIMITS = {
   // upload survives before the cleanup cron drops its temp chunks.
   LARGE_ATTACHMENT: {
     // Tuned for a small VPS behind a default-configured reverse proxy:
-    // - 1 MB chunk stays under nginx's default `client_max_body_size` (1 MB),
-    //   so no server-side body-limit bump is required.
-    // - 100 MB total bounds the in-memory `Buffer.concat` at `complete` time
-    //   so a 1–2 GB RAM VPS doesn't OOM under concurrent finalizations.
+    // - 512 KB chunk + multipart envelope (~200 B) stays comfortably under
+    //   nginx's default `client_max_body_size` of 1 MB. We could push to
+    //   ~900 KB but the headroom is worth it to survive any envelope
+    //   inflation from form-data fields.
+    // - 100 MB total bounds the in-memory `Buffer.concat` at `complete`
+    //   time so a 1–2 GB RAM VPS doesn't OOM under concurrent finalizations.
     maxSize: 100 * MB,
-    chunkSize: 1 * MB,
-    chunkUploadCap: 1 * MB + 256 * 1024, // 1 MB chunk + multipart envelope headroom
+    chunkSize: 512 * 1024,
+    chunkUploadCap: 768 * 1024, // 512 KB chunk + plenty of multipart envelope headroom
     sessionTtlMs: 60 * 60 * 1000, // 1 hour
     mimes: [
       'image/jpeg',
