@@ -165,20 +165,24 @@ jobs:
             echo "stage=skipped" >> $GITHUB_OUTPUT
           fi
 
+      # HTML format is used instead of Markdown because raw commit messages
+      # often contain unbalanced `_` `*` `[` `(` that break Markdown parsing
+      # mid-message ("can't find end of the entity" error from Telegram).
+      # HTML only requires escaping `< > &`, which commit messages rarely have.
       - name: Send Telegram notification
         if: steps.status.outputs.stage != 'skipped'
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          format: markdown
+          format: html
           message: |
-            ${{ steps.status.outputs.icon }} *${{ steps.status.outputs.title }}*
+            ${{ steps.status.outputs.icon }} <b>${{ steps.status.outputs.title }}</b>
 
-            *Repo:* `${{ github.repository }}`
-            *Branch:* `${{ github.ref_name }}`
-            *Commit:* `${{ github.sha }}`
-            *Author:* ${{ github.actor }}
-            *Message:* ${{ github.event.head_commit.message }}
+            <b>Repo:</b> <code>${{ github.repository }}</code>
+            <b>Branch:</b> <code>${{ github.ref_name }}</code>
+            <b>Commit:</b> <code>${{ github.sha }}</code>
+            <b>Author:</b> ${{ github.actor }}
+            <b>Message:</b> ${{ github.event.head_commit.message }}
 
-            [View Action](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">View Action</a>
