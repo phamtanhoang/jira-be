@@ -55,9 +55,14 @@ export const UPLOAD_LIMITS = {
   // bounds the assembled file. Session TTL is how long a half-finished
   // upload survives before the cleanup cron drops its temp chunks.
   LARGE_ATTACHMENT: {
-    maxSize: 200 * MB,
-    chunkSize: 5 * MB,
-    chunkUploadCap: 6 * MB, // 5 MB chunk + small headroom for multipart envelope
+    // Tuned for a small VPS behind a default-configured reverse proxy:
+    // - 1 MB chunk stays under nginx's default `client_max_body_size` (1 MB),
+    //   so no server-side body-limit bump is required.
+    // - 100 MB total bounds the in-memory `Buffer.concat` at `complete` time
+    //   so a 1–2 GB RAM VPS doesn't OOM under concurrent finalizations.
+    maxSize: 100 * MB,
+    chunkSize: 1 * MB,
+    chunkUploadCap: (1 * MB) + 256 * 1024, // 1 MB chunk + multipart envelope headroom
     sessionTtlMs: 60 * 60 * 1000, // 1 hour
     mimes: [
       'image/jpeg',
