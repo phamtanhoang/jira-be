@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -8,7 +7,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { ActivityAction } from '@prisma/client';
+import {
+  ActivityAction,
+  Prisma,
+  UploadSession,
+  UploadSessionStatus,
+} from '@prisma/client';
 import {
   MSG,
   USER_SELECT_BASIC,
@@ -20,35 +24,17 @@ import {
   assertExists,
   assertProjectAccess,
   deleteChunkObjects,
+  deleteFile,
   downloadChunkObject,
-  listChunkIndices,
   uploadChunkObject,
   uploadFile,
 } from '@/core/utils';
 import { SettingsService } from '@/modules/settings/settings.service';
 import { InitLargeUploadDto } from './dto';
 
-type LargeUploadSession = {
-  id: string;
-  userId: string;
-  issueId: string;
-  fileName: string;
-  mimeType: string;
-  fileSize: number;
-  totalChunks: number;
-  receivedChunks: Set<number>;
-  bytesReceived: number;
-  expiresAt: number;
-};
-
 @Injectable()
 export class AttachmentsLargeService {
   private readonly logger = new Logger(AttachmentsLargeService.name);
-
-  // In-memory session map. A single BE instance is fine for this codebase;
-  // if the app ever runs multiple replicas, swap this for Redis (same key
-  // namespace + TTL) without changing the public surface.
-  private readonly sessions = new Map<string, LargeUploadSession>();
 
   constructor(
     private prisma: PrismaService,
@@ -64,8 +50,6 @@ export class AttachmentsLargeService {
     if (dto.fileSize > limits.maxSize) {
       throw new BadRequestException(MSG.ERROR.LARGE_UPLOAD_TOO_LARGE);
     }
-    // Caller must split into chunks ≤ chunkSize. We let last chunk be
-    // smaller but never larger.
     if (dto.fileSize > dto.totalChunks * limits.chunkSize) {
       throw new BadRequestException(MSG.ERROR.LARGE_UPLOAD_SIZE_MISMATCH);
     }
@@ -86,26 +70,25 @@ export class AttachmentsLargeService {
 
     await this.assertQuota(issue.project.workspaceId, dto.fileSize);
 
-    const id = randomUUID();
-    const session: LargeUploadSession = {
-      id,
-      userId,
-      issueId: dto.issueId,
-      fileName: dto.fileName,
-      mimeType: dto.mimeType,
-      fileSize: dto.fileSize,
-      totalChunks: dto.totalChunks,
-      receivedChunks: new Set(),
-      bytesReceived: 0,
-      expiresAt: Date.now() + limits.sessionTtlMs,
-    };
-    this.sessions.set(id, session);
+    const session = await this.prisma.uploadSession.create({
+      data: {
+        userId,
+        issueId: dto.issueId,
+        fileName: dto.fileName,
+        mimeType: dto.mimeType,
+        fileSize: dto.fileSize,
+        totalChunks: dto.totalChunks,
+        chunkSize: limits.chunkSize,
+        status: UploadSessionStatus.PENDING,
+        expiresAt: new Date(Date.now() + limits.sessionTtlMs),
+      },
+    });
 
     return {
-      sessionId: id,
+      sessionId: session.id,
       chunkSize: limits.chunkSize,
       totalChunks: dto.totalChunks,
-      expiresAt: new Date(session.expiresAt).toISOString(),
+      expiresAt: session.expiresAt.toISOString(),
     };
   }
 
@@ -115,7 +98,7 @@ export class AttachmentsLargeService {
     chunkIndex: number,
     file: Express.Multer.File,
   ) {
-    const session = this.getOwnedSession(sessionId, userId);
+    const session = await this.getActiveSession(sessionId, userId);
 
     if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
       throw new BadRequestException(
@@ -128,131 +111,140 @@ export class AttachmentsLargeService {
       );
     }
     if (file.size > UPLOAD_LIMITS.LARGE_ATTACHMENT.chunkSize) {
-      // Last chunk may be smaller; never larger than declared chunkSize.
       throw new BadRequestException(MSG.ERROR.LARGE_UPLOAD_SIZE_MISMATCH);
     }
 
     await uploadChunkObject(sessionId, chunkIndex, file.buffer);
 
-    if (!session.receivedChunks.has(chunkIndex)) {
-      session.receivedChunks.add(chunkIndex);
-      session.bytesReceived += file.size;
-    }
+    // Atomically add the chunk to the receivedChunks array if not already
+    // present. We re-fetch + update because Prisma's array operations are
+    // limited; the row is small so a read-modify-write is cheap.
+    const updated = await this.prisma.uploadSession.update({
+      where: { id: sessionId },
+      data: session.receivedChunks.includes(chunkIndex)
+        ? {} // no-op: chunk was already counted (idempotent retry)
+        : {
+            receivedChunks: { push: chunkIndex },
+            bytesReceived: { increment: file.size },
+          },
+    });
 
     return {
-      received: session.receivedChunks.size,
-      total: session.totalChunks,
+      received: updated.receivedChunks.length,
+      total: updated.totalChunks,
+      bytesReceived: updated.bytesReceived,
+    };
+  }
+
+  /**
+   * Read-only progress probe — used by FE to resume an interrupted upload
+   * after page reload. Returns the same shape as `receiveChunk` plus the
+   * indices already on storage so FE can skip them.
+   */
+  async getStatus(sessionId: string, userId: string) {
+    const session = await this.getActiveSession(sessionId, userId);
+    return {
+      sessionId: session.id,
+      issueId: session.issueId,
+      fileName: session.fileName,
+      fileSize: session.fileSize,
+      mimeType: session.mimeType,
+      totalChunks: session.totalChunks,
+      chunkSize: session.chunkSize,
+      receivedChunks: [...session.receivedChunks].sort((a, b) => a - b),
       bytesReceived: session.bytesReceived,
+      status: session.status,
+      expiresAt: session.expiresAt.toISOString(),
     };
   }
 
   async complete(sessionId: string, userId: string) {
-    const session = this.getOwnedSession(sessionId, userId);
-
-    if (session.receivedChunks.size !== session.totalChunks) {
-      throw new BadRequestException(MSG.ERROR.LARGE_UPLOAD_INCOMPLETE);
-    }
-
-    // Self-heal: list what's actually on Supabase before assembling.
-    // The BE session bookkeeping is best-effort — Supabase free tier
-    // occasionally returns 200 OK on upload but doesn't persist the
-    // object, so `receivedChunks` can think a chunk is there when it
-    // isn't. Hand the FE the missing indices in a 409 response so it
-    // can re-upload only those and call `/complete` again.
-    const present = new Set(await listChunkIndices(sessionId));
-    const missing: number[] = [];
-    for (let i = 0; i < session.totalChunks; i++) {
-      if (!present.has(i)) {
-        missing.push(i);
-        // Keep BE state consistent: forget that we ever received this
-        // chunk so the next `/chunk` call from FE actually re-uploads
-        // (otherwise the `if (!receivedChunks.has(i))` guard might skip
-        // bumping bytesReceived again on duplicate).
-        session.receivedChunks.delete(i);
-      }
-    }
-    if (missing.length > 0) {
-      this.logger.warn(
-        `Session ${sessionId} missing chunks at /complete: [${missing.join(',')}]`,
-      );
-      throw new ConflictException({
-        message: MSG.ERROR.LARGE_UPLOAD_CHUNKS_MISSING,
-        missingChunks: missing,
-      });
-    }
-
-    // Assemble in memory. Bounded by LARGE_ATTACHMENT.maxSize so the peak
-    // RSS is predictable. If this ever needs to grow past ~hundreds of MB,
-    // switch to a streaming uploader (Supabase TUS).
-    const buffers: Buffer[] = [];
-    for (let i = 0; i < session.totalChunks; i++) {
-      buffers.push(await downloadChunkObject(sessionId, i));
-    }
-    const finalBuffer = Buffer.concat(buffers);
-    if (finalBuffer.byteLength !== session.fileSize) {
-      // Drop the half-written upload so the user can retry cleanly.
-      void deleteChunkObjects(sessionId, session.totalChunks);
-      this.sessions.delete(sessionId);
-      throw new BadRequestException(MSG.ERROR.LARGE_UPLOAD_SIZE_MISMATCH);
-    }
-
-    const fileUrl = await uploadFile(
-      finalBuffer,
-      session.fileName,
-      session.mimeType,
-    );
-
-    const attachment = await this.prisma.attachment.create({
-      data: {
-        issueId: session.issueId,
-        uploadedById: userId,
-        fileName: session.fileName,
-        fileUrl,
-        fileSize: session.fileSize,
-        mimeType: session.mimeType,
-      },
-      include: { uploadedBy: USER_SELECT_BASIC },
-    });
-
-    await this.prisma.activity.create({
-      data: {
-        issueId: session.issueId,
+    // Mark the session COMPLETING in a conditional update — only the row
+    // currently in PENDING flips, so a concurrent /complete call sees no
+    // matching row and bails with NotFound. This is our atomic mutex
+    // against duplicate Attachment rows.
+    const claim = await this.prisma.uploadSession.updateMany({
+      where: {
+        id: sessionId,
         userId,
-        action: ActivityAction.ATTACHED,
-        newValue: session.fileName,
+        status: UploadSessionStatus.PENDING,
+        expiresAt: { gt: new Date() },
       },
+      data: { status: UploadSessionStatus.COMPLETING },
+    });
+    if (claim.count === 0) {
+      // Either the session never existed, has been claimed by another
+      // /complete, was already finished, or expired. Distinguish so the
+      // FE can either show "already done" (return cached attachment) or
+      // "not found" (start over).
+      const session = await this.prisma.uploadSession.findUnique({
+        where: { id: sessionId },
+      });
+      if (!session || session.userId !== userId) {
+        throw new NotFoundException(MSG.ERROR.LARGE_UPLOAD_SESSION_NOT_FOUND);
+      }
+      if (
+        session.status === UploadSessionStatus.COMPLETED &&
+        session.attachmentId
+      ) {
+        const attachment = await this.prisma.attachment.findUnique({
+          where: { id: session.attachmentId },
+          include: { uploadedBy: USER_SELECT_BASIC },
+        });
+        if (attachment) return attachment;
+      }
+      if (session.status === UploadSessionStatus.COMPLETING) {
+        throw new ConflictException(MSG.ERROR.LARGE_UPLOAD_IN_PROGRESS);
+      }
+      throw new NotFoundException(MSG.ERROR.LARGE_UPLOAD_SESSION_NOT_FOUND);
+    }
+
+    const session = await this.prisma.uploadSession.findUniqueOrThrow({
+      where: { id: sessionId },
     });
 
-    // Cleanup runs after the DB writes so a Supabase blip never costs the
-    // user their attachment row.
-    void deleteChunkObjects(sessionId, session.totalChunks);
-    this.sessions.delete(sessionId);
-
-    return attachment;
-  }
-
-  abort(sessionId: string, userId: string): void {
-    const session = this.getOwnedSession(sessionId, userId);
-    void deleteChunkObjects(sessionId, session.totalChunks);
-    this.sessions.delete(sessionId);
-  }
-
-  // Sweep abandoned sessions every 10 minutes. Anything past its TTL gets
-  // its temp chunks deleted so we don't pay for storage forever.
-  @Cron(CronExpression.EVERY_10_MINUTES)
-  async sweepExpiredSessions() {
-    const now = Date.now();
-    const expired: LargeUploadSession[] = [];
-    for (const session of this.sessions.values()) {
-      if (session.expiresAt < now) expired.push(session);
+    try {
+      return await this.assembleAndPersist(session, userId);
+    } catch (err) {
+      // ConflictException carries `missingChunks` — FE will re-upload and
+      // call /complete again, so we need the session usable for retry.
+      // Move it back to PENDING.
+      if (err instanceof ConflictException) {
+        await this.prisma.uploadSession.update({
+          where: { id: sessionId },
+          data: { status: UploadSessionStatus.PENDING },
+        });
+        throw err;
+      }
+      // Any other failure is terminal for this session — mark FAILED so
+      // the cron sweep eventually cleans temp chunks. We do NOT auto-
+      // delete chunks here: a retry from FE might still recover.
+      await this.prisma.uploadSession.update({
+        where: { id: sessionId },
+        data: { status: UploadSessionStatus.FAILED },
+      });
+      throw err;
     }
-    for (const session of expired) {
-      this.sessions.delete(session.id);
-      try {
-        await deleteChunkObjects(session.id, session.totalChunks);
-      } catch (err) {
+  }
+
+  abort(sessionId: string, userId: string): Promise<void> {
+    return this.abortInternal(sessionId, userId);
+  }
+
+  /**
+   * Same as `abort` but tolerates "already gone" — used by the
+   * `navigator.sendBeacon` cleanup that fires from the browser as the
+   * tab is being torn down, where retries aren't possible.
+   */
+  async abortBeacon(sessionId: string, userId: string): Promise<void> {
+    try {
+      await this.abortInternal(sessionId, userId);
+    } catch (err) {
+      // Beacon path: swallow NotFound (session already cleaned) so the
+      // browser doesn't keep retrying. Log anything weirder.
+      if (!(err instanceof NotFoundException)) {
         this.logger.warn(
-          `Failed to cleanup expired session ${session.id}: ${
+          `Beacon abort for ${sessionId} hit unexpected error: ${
             err instanceof Error ? err.message : String(err)
           }`,
         );
@@ -260,23 +252,197 @@ export class AttachmentsLargeService {
     }
   }
 
-  private getOwnedSession(
+  private async abortInternal(
     sessionId: string,
     userId: string,
-  ): LargeUploadSession {
-    const session = this.sessions.get(sessionId);
+  ): Promise<void> {
+    const session = await this.prisma.uploadSession.findUnique({
+      where: { id: sessionId },
+    });
     if (!session) {
       throw new NotFoundException(MSG.ERROR.LARGE_UPLOAD_SESSION_NOT_FOUND);
     }
     if (session.userId !== userId) {
       throw new ForbiddenException(MSG.ERROR.INSUFFICIENT_PERMISSIONS);
     }
-    if (session.expiresAt < Date.now()) {
-      this.sessions.delete(sessionId);
-      void deleteChunkObjects(sessionId, session.totalChunks);
+    if (
+      session.status === UploadSessionStatus.COMPLETED ||
+      session.status === UploadSessionStatus.ABORTED
+    ) {
+      // Idempotent — already finished one way or another.
+      return;
+    }
+    await this.prisma.uploadSession.update({
+      where: { id: sessionId },
+      data: { status: UploadSessionStatus.ABORTED },
+    });
+    void deleteChunkObjects(sessionId, session.totalChunks);
+  }
+
+  // Sweep every 5 minutes — short enough that abandoned uploads don't pile
+  // storage cost, long enough that legitimate resume traffic always finds
+  // its session.
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async sweepExpiredSessions() {
+    const now = new Date();
+    const expired = await this.prisma.uploadSession.findMany({
+      where: {
+        expiresAt: { lt: now },
+        status: {
+          in: [UploadSessionStatus.PENDING, UploadSessionStatus.FAILED],
+        },
+      },
+      select: { id: true, totalChunks: true },
+      take: 100,
+    });
+    for (const session of expired) {
+      try {
+        await deleteChunkObjects(session.id, session.totalChunks);
+      } catch (err) {
+        this.logger.warn(
+          `Sweep chunk cleanup failed for ${session.id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+    if (expired.length > 0) {
+      await this.prisma.uploadSession.updateMany({
+        where: { id: { in: expired.map((s) => s.id) } },
+        data: { status: UploadSessionStatus.ABORTED },
+      });
+      this.logger.log(`Sweep aborted ${expired.length} expired session(s).`);
+    }
+  }
+
+  // ─── Helpers ───────────────────────────────────────────────────────
+
+  private async getActiveSession(
+    sessionId: string,
+    userId: string,
+  ): Promise<UploadSession> {
+    const session = await this.prisma.uploadSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session) {
       throw new NotFoundException(MSG.ERROR.LARGE_UPLOAD_SESSION_NOT_FOUND);
     }
+    if (session.userId !== userId) {
+      throw new ForbiddenException(MSG.ERROR.INSUFFICIENT_PERMISSIONS);
+    }
+    if (session.expiresAt < new Date()) {
+      // Lazy expire — mark and bail. Cron will pick up the chunk cleanup.
+      await this.prisma.uploadSession.update({
+        where: { id: sessionId },
+        data: { status: UploadSessionStatus.ABORTED },
+      });
+      throw new NotFoundException(MSG.ERROR.LARGE_UPLOAD_SESSION_NOT_FOUND);
+    }
+    if (
+      session.status === UploadSessionStatus.ABORTED ||
+      session.status === UploadSessionStatus.FAILED
+    ) {
+      throw new NotFoundException(MSG.ERROR.LARGE_UPLOAD_SESSION_NOT_FOUND);
+    }
+    if (session.status === UploadSessionStatus.COMPLETED) {
+      throw new ConflictException(MSG.ERROR.LARGE_UPLOAD_ALREADY_COMPLETED);
+    }
     return session;
+  }
+
+  /**
+   * Verify every chunk is downloadable, assemble the final file, persist
+   * it to storage, then write the Attachment + Activity rows in a single
+   * Prisma transaction. If the DB transaction fails AFTER the final file
+   * has been uploaded, we best-effort delete the final file so we don't
+   * leak storage. On chunk-download failure (Supabase consistency lag)
+   * we throw a 409 with the missing indices so the FE can re-upload.
+   */
+  private async assembleAndPersist(session: UploadSession, userId: string) {
+    // Download all chunks. On any download failure → ask FE for re-upload.
+    const buffers: Buffer[] = [];
+    for (let i = 0; i < session.totalChunks; i++) {
+      try {
+        buffers.push(await downloadChunkObject(session.id, i));
+      } catch (err) {
+        this.logger.warn(
+          `Session ${session.id} download failed for chunk ${i}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+        // Forget this chunk in the bookkeeping so /chunk re-upload counts again.
+        await this.prisma.uploadSession.update({
+          where: { id: session.id },
+          data: {
+            receivedChunks: session.receivedChunks.filter((c) => c !== i),
+            bytesReceived: { decrement: session.chunkSize },
+          },
+        });
+        throw new ConflictException({
+          message: MSG.ERROR.LARGE_UPLOAD_CHUNKS_MISSING,
+          missingChunks: [i],
+        });
+      }
+    }
+    const finalBuffer = Buffer.concat(buffers);
+    if (finalBuffer.byteLength !== session.fileSize) {
+      throw new BadRequestException(MSG.ERROR.LARGE_UPLOAD_SIZE_MISMATCH);
+    }
+
+    // Upload the assembled file to its permanent storage path. From here
+    // until the DB transaction commits, a failure means we need to delete
+    // this file to avoid leaking storage.
+    const fileUrl = await uploadFile(
+      finalBuffer,
+      session.fileName,
+      session.mimeType,
+    );
+
+    let attachment: Prisma.AttachmentGetPayload<{
+      include: { uploadedBy: typeof USER_SELECT_BASIC };
+    }>;
+    try {
+      attachment = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.attachment.create({
+          data: {
+            issueId: session.issueId,
+            uploadedById: userId,
+            fileName: session.fileName,
+            fileUrl,
+            fileSize: session.fileSize,
+            mimeType: session.mimeType,
+          },
+          include: { uploadedBy: USER_SELECT_BASIC },
+        });
+        await tx.activity.create({
+          data: {
+            issueId: session.issueId,
+            userId,
+            action: ActivityAction.ATTACHED,
+            newValue: session.fileName,
+          },
+        });
+        await tx.uploadSession.update({
+          where: { id: session.id },
+          data: {
+            status: UploadSessionStatus.COMPLETED,
+            attachmentId: created.id,
+          },
+        });
+        return created;
+      });
+    } catch (err) {
+      // DB write failed — undo the storage upload so we don't leak.
+      void deleteFile(fileUrl);
+      throw err;
+    }
+
+    // Cleanup temp chunks. Fire-and-forget — leaked temp chunks are
+    // wasted storage, not a data bug; the cron sweep will catch any
+    // straggler too.
+    void deleteChunkObjects(session.id, session.totalChunks);
+
+    return attachment;
   }
 
   private async assertQuota(workspaceId: string, incomingBytes: number) {

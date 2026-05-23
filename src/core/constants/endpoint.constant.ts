@@ -104,6 +104,8 @@ export const ENDPOINTS = {
     LARGE_CHUNK: 'attachments/large/:sessionId/chunk',
     LARGE_COMPLETE: 'attachments/large/:sessionId/complete',
     LARGE_ABORT: 'attachments/large/:sessionId',
+    LARGE_STATUS: 'attachments/large/:sessionId/status',
+    LARGE_ABORT_BEACON: 'attachments/large/:sessionId/abort-beacon',
   },
   WORKLOGS: {
     BASE: 'worklogs',

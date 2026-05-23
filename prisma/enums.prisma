@@ -83,3 +83,11 @@ enum IssueLinkType {
   DUPLICATES
   CLONED_FROM
 }
+
+enum UploadSessionStatus {
+  PENDING
+  COMPLETING
+  COMPLETED
+  ABORTED
+  FAILED
+}

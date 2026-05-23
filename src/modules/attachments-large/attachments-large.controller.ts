@@ -3,6 +3,9 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseIntPipe,
   Post,
@@ -12,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { memoryStorage } from 'multer';
 import { ENDPOINTS, MSG, UPLOAD_LIMITS } from '@/core/constants';
 import { CurrentUser } from '@/core/decorators';
@@ -22,10 +25,12 @@ import { InitLargeUploadDto } from './dto';
 
 // Large / chunked attachment upload.
 // Flow:
-//   1) POST /attachments/large/init      → sessionId + chunkSize
-//   2) POST /attachments/large/:id/chunk → repeat per chunk (index in body)
-//   3) POST /attachments/large/:id/complete → assembles + creates Attachment
-//   4) DELETE /attachments/large/:id     → optional abort + cleanup
+//   POST   /attachments/large/init                  → sessionId + chunkSize
+//   GET    /attachments/large/:id/status            → progress (resume support)
+//   POST   /attachments/large/:id/chunk             → one chunk per call
+//   POST   /attachments/large/:id/complete          → assemble + create Attachment
+//   DELETE /attachments/large/:id                   → client-initiated abort
+//   POST   /attachments/large/:id/abort-beacon      → `navigator.sendBeacon` abort
 @ApiTags('Attachments')
 @Controller(ENDPOINTS.ATTACHMENTS.LARGE_BASE)
 export class AttachmentsLargeController {
@@ -40,6 +45,19 @@ export class AttachmentsLargeController {
   async init(@CurrentUser() user: AuthUser, @Body() dto: InitLargeUploadDto) {
     const session = await this.large.init(user.id, dto);
     return { message: MSG.SUCCESS.LARGE_UPLOAD_INITIATED, ...session };
+  }
+
+  // Read-only progress probe used by the FE to resume an interrupted
+  // upload after page reload. Skip throttle — it's a cheap GET and the
+  // FE may call it on mount for each persisted local session.
+  @Get(':sessionId/status')
+  @SkipThrottle()
+  @ApiOperation({
+    summary:
+      'Get progress + received chunk indices for an in-progress upload — used by FE resume.',
+  })
+  status(@CurrentUser() user: AuthUser, @Param('sessionId') sessionId: string) {
+    return this.large.getStatus(sessionId, user.id);
   }
 
   @Post(':sessionId/chunk')
@@ -88,10 +106,31 @@ export class AttachmentsLargeController {
   @Delete(':sessionId')
   @ApiOperation({
     summary:
-      'Abort an in-progress chunked upload and drop any uploaded chunks.',
+      'Client-initiated abort: cancel an in-progress upload and drop temp chunks.',
   })
-  abort(@CurrentUser() user: AuthUser, @Param('sessionId') sessionId: string) {
-    this.large.abort(sessionId, user.id);
+  async abort(
+    @CurrentUser() user: AuthUser,
+    @Param('sessionId') sessionId: string,
+  ) {
+    await this.large.abort(sessionId, user.id);
     return { message: MSG.SUCCESS.LARGE_UPLOAD_ABORTED };
+  }
+
+  // Browser-beacon abort: `navigator.sendBeacon` only does POST, so we
+  // mirror DELETE as POST here. Returns 204 (no body) — beacons are
+  // fire-and-forget, the FE will already be torn down by the time this
+  // runs. SkipThrottle because beacons stack up on rapid tab close.
+  @Post(':sessionId/abort-beacon')
+  @SkipThrottle()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary:
+      'Beacon-friendly POST abort, called by `navigator.sendBeacon` on tab close.',
+  })
+  async abortBeacon(
+    @CurrentUser() user: AuthUser,
+    @Param('sessionId') sessionId: string,
+  ) {
+    await this.large.abortBeacon(sessionId, user.id);
   }
 }

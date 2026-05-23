@@ -1,0 +1,33 @@
+/// Persistent state for chunked / resumable attachment uploads.
+///
+/// Replaces the legacy in-memory `Map<sessionId, session>` so:
+///   - sessions survive BE container restart (CI deploys, crashes),
+///   - FE can resume an interrupted upload after browser close, F5,
+///     dead battery, etc. via the session id stored in localStorage,
+///   - cleanup is observable and queryable (`status` + `updatedAt`).
+///
+/// `receivedChunks` is a Postgres int[] of chunk indices already
+/// persisted on object storage — the source of truth for what FE
+/// still needs to upload.
+model UploadSession {
+  id             String              @id @default(uuid())
+  userId         String
+  issueId        String
+  fileName       String
+  fileSize       Int
+  mimeType       String
+  totalChunks    Int
+  chunkSize      Int
+  receivedChunks Int[]               @default([])
+  bytesReceived  Int                 @default(0)
+  status         UploadSessionStatus @default(PENDING)
+  /// When `status` flips to COMPLETED, this is the resulting attachment row.
+  /// Lets a duplicate /complete call return the original instead of redoing.
+  attachmentId   String?
+  expiresAt      DateTime
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([userId, status])
+  @@index([expiresAt])
+}

@@ -214,7 +214,7 @@ export async function downloadChunkObject(
   const bucket = getBucket();
   const path = chunkObjectPath(sessionId, chunkIndex);
 
-  const MAX_ATTEMPTS = 4;
+  const MAX_ATTEMPTS = 6;
   let lastErrorMessage = 'no data';
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -224,12 +224,12 @@ export async function downloadChunkObject(
       return Buffer.from(arrayBuffer);
     }
     lastErrorMessage = error?.message ?? 'no data';
+    logger.warn(
+      `Supabase chunk download attempt ${attempt}/${MAX_ATTEMPTS} failed (${path}): ${lastErrorMessage}`,
+    );
     if (attempt < MAX_ATTEMPTS) {
-      logger.warn(
-        `Supabase chunk download attempt ${attempt}/${MAX_ATTEMPTS} failed (${path}): ${lastErrorMessage}`,
-      );
-      // Backoff 500ms · attempt — Supabase eventual consistency usually
-      // resolves within a couple of seconds.
+      // Exponential-ish backoff. Free-tier Supabase consistency window
+      // can be up to ~5s; total backoff here is ~12s before giving up.
       await new Promise((r) => setTimeout(r, 500 * attempt));
     }
   }
