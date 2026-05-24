@@ -30,6 +30,7 @@ import { InviteLinksModule } from '@/modules/invite-links/invite-links.module';
 import { IssueTemplatesModule } from '@/modules/issue-templates/issue-templates.module';
 import { IssuesModule } from '@/modules/issues/issues.module';
 import { LabelsModule } from '@/modules/labels/labels.module';
+import { LoggingConfigModule } from '@/modules/logging-config/logging-config.module';
 import { LogsModule } from '@/modules/logs/logs.module';
 import { NotificationsModule } from '@/modules/notifications/notifications.module';
 import { PatModule } from '@/modules/personal-access-tokens/pat.module';
@@ -57,6 +58,7 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     ScheduleModule.forRoot(),
     AppCacheModule,
     PrismaModule,
+    LoggingConfigModule,
     LogsModule,
     AuthModule,
     SettingsModule,

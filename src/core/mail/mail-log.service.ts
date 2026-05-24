@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MailStatus, MailType, Prisma } from '@prisma/client';
 import { PrismaService } from '@/core/database/prisma.service';
+import { LoggingConfigService } from '@/modules/logging-config/logging-config.service';
 
 interface RecordSentInput {
   type: MailType;
@@ -38,7 +39,10 @@ interface ListInput {
 export class MailLogService {
   private readonly logger = new Logger(MailLogService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private loggingConfig: LoggingConfigService,
+  ) {}
 
   recordSent(input: RecordSentInput) {
     this.create({
@@ -64,6 +68,7 @@ export class MailLogService {
   }
 
   private create(data: Prisma.MailLogCreateInput) {
+    if (!this.loggingConfig.isEnabled('mailLog')) return;
     void this.prisma.mailLog.create({ data }).catch((err) => {
       this.logger.warn(`MailLog persistence failed: ${String(err)}`);
     });

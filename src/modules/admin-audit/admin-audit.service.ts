@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/core/database/prisma.service';
 import { csvEscape } from '@/core/utils';
+import { LoggingConfigService } from '@/modules/logging-config/logging-config.service';
 
 export type AuditAction =
   | 'ROLE_CHANGE'
@@ -36,17 +37,22 @@ export type QueryAuditLog = {
 export class AdminAuditService {
   private readonly logger = new Logger(AdminAuditService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private loggingConfig: LoggingConfigService,
+  ) {}
 
   /**
    * Fire-and-forget: writes an audit record. Never throws — an audit write
    * failure must not break the HTTP request that triggered the action.
+   * Skips the write entirely when the admin has disabled audit logging.
    */
   log(
     actorId: string,
     action: AuditAction,
     params: { target?: string; targetType?: string; payload?: unknown } = {},
   ): void {
+    if (!this.loggingConfig.isEnabled('adminAudit')) return;
     void this.prisma.adminAuditLog
       .create({
         data: {

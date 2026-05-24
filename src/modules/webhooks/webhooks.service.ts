@@ -8,6 +8,7 @@ import {
 import { Prisma, WorkspaceRole } from '@prisma/client';
 import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { LoggingConfigService } from '@/modules/logging-config/logging-config.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import { CreateWebhookDto, UpdateWebhookDto, WEBHOOK_EVENTS } from './dto';
 
@@ -46,6 +47,7 @@ export class WebhooksService {
   constructor(
     private prisma: PrismaService,
     private workspacesService: WorkspacesService,
+    private loggingConfig: LoggingConfigService,
   ) {}
 
   static get knownEvents(): readonly string[] {
@@ -141,6 +143,10 @@ export class WebhooksService {
    */
   dispatch(workspaceId: string, eventType: string, payload: unknown): void {
     if (!WebhooksService.knownEvents.includes(eventType)) return;
+    // Admin-controlled toggle — when disabled we don't even look up
+    // subscribers, so no row in WebhookDelivery, no HTTP call, no
+    // retry storm.
+    if (!this.loggingConfig.isEnabled('webhookDelivery')) return;
     void this.lookupAndDispatch(workspaceId, eventType, payload).catch(
       (err: unknown) =>
         this.logger.warn(

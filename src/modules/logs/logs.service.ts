@@ -8,6 +8,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { LoggingConfigService } from '@/modules/logging-config/logging-config.service';
 import { QueryLogsDto } from './dto';
 
 const FLUSH_INTERVAL_MS = 2000;
@@ -25,7 +26,10 @@ export class LogsService implements OnModuleInit, OnModuleDestroy {
   private buffer: EnqueueLogInput[] = [];
   private timer: NodeJS.Timeout | null = null;
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private loggingConfig: LoggingConfigService,
+  ) {}
 
   onModuleInit() {
     this.timer = setInterval(() => {
@@ -47,6 +51,10 @@ export class LogsService implements OnModuleInit, OnModuleDestroy {
    */
   enqueue(entry: EnqueueLogInput): void {
     try {
+      // Admin kill switch — short-circuit before touching the buffer
+      // so disabled state has zero runtime + storage cost.
+      if (!this.loggingConfig.isEnabled('requestLog')) return;
+
       if (this.buffer.length >= MAX_BUFFER_SIZE) {
         // Drop oldest to avoid unbounded memory growth if DB is down
         this.buffer.shift();

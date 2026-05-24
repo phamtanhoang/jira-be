@@ -6,6 +6,7 @@ import { PrismaService } from '@/core/database/prisma.service';
 import { MailService } from '@/core/mail/mail.service';
 import { uploadFile } from '@/core/utils';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
+import { LoggingConfigService } from '@/modules/logging-config/logging-config.service';
 
 /**
  * Placeholder used by GET /settings/app.email so the SMTP password is never
@@ -21,6 +22,7 @@ export class SettingsService {
     private mail: MailService,
     private audit: AdminAuditService,
     private cacheTags: CacheTagsService,
+    private loggingConfig: LoggingConfigService,
   ) {}
 
   async getAppInfo() {
@@ -65,7 +67,20 @@ export class SettingsService {
 
   async getByKey(key: string) {
     const setting = await this.prisma.setting.findUnique({ where: { key } });
-    if (!setting) throw new NotFoundException(MSG.ERROR.SETTING_NOT_FOUND);
+    if (!setting) {
+      // Logging config is read by the admin UI on every page-load of
+      // /admin/logs. We want the toggles to render with the
+      // "everything on" defaults even before the row is materialized,
+      // so the admin doesn't see a 404 on a fresh install.
+      if (key === SETTING_KEYS.APP_LOGGING_CONFIG) {
+        return {
+          key,
+          value: this.loggingConfig.getSnapshot(),
+          updatedAt: new Date(),
+        };
+      }
+      throw new NotFoundException(MSG.ERROR.SETTING_NOT_FOUND);
+    }
     if (key === SETTING_KEYS.APP_EMAIL) {
       return { ...setting, value: redactAppEmail(setting.value) };
     }
@@ -206,6 +221,13 @@ export class SettingsService {
     });
 
     void this.cacheTags.invalidateTag('settings');
+
+    if (key === SETTING_KEYS.APP_LOGGING_CONFIG) {
+      // Pull the new toggles into the in-memory snapshot immediately so
+      // admins watching the effect take hold don't have to wait for the
+      // periodic refresh (5min) — they expect instant feedback.
+      void this.loggingConfig.refresh();
+    }
 
     if (key === SETTING_KEYS.APP_EMAIL) {
       return { ...row, value: redactAppEmail(row.value) };
