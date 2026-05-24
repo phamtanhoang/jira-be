@@ -16,12 +16,15 @@ import { AuthUser } from '@/core/types';
 import {
   sanitize,
   shouldDropRequestBody,
-  shouldSkipLogging,
   TIMEZONE_HEADER,
   convertDateToTimezone,
   resolveTimezone,
 } from '@/core/utils';
-import { LogsService } from '@/modules/logs/logs.service';
+import {
+  EventLoggerService,
+  EVENTS,
+  type EventName,
+} from '@/modules/logs/event-logger.service';
 
 @Injectable()
 @Catch()
@@ -29,7 +32,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
 
   constructor(
-    private logsService: LogsService,
+    private events: EventLoggerService,
     private sentryService: SentryService,
   ) {}
 
@@ -57,12 +60,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? message
         : ((message as { message?: string | string[] }).message ?? message);
 
-    // Surface a stable machine-readable code so the FE can branch without
-    // parsing the (i18n) message string. Only present on domain exceptions.
     const errorCode =
       exception instanceof BaseAppException ? exception.errorCode : undefined;
 
-    // Fire-and-forget logging — must never affect the response
+    // Fire-and-forget — never affect the response.
     this.safeLog(request, status, exception);
 
     response.status(status).json({
@@ -73,34 +74,34 @@ export class AllExceptionsFilter implements ExceptionFilter {
     });
   }
 
+  /**
+   * Event-driven logging. Only emit when the failure is actually worth a
+   * row in the DB:
+   *   - 5xx   → `error.5xx` (always; Sentry too)
+   *   - 403   → `authz.denied` (security signal)
+   *   - 429   → `ratelimit.hit` (operational signal)
+   *
+   * Everything else (404, validation 400, 401 auth probes, etc.) is
+   * normal protocol traffic and stays out of the DB. If you need ad-hoc
+   * debugging of those, look at `docker logs` — every exception still
+   * goes through NestJS's stdout logger.
+   */
   private safeLog(
     request: Request & { user?: AuthUser },
     status: number,
     exception: unknown,
   ) {
     try {
+      const event = pickEventFor(status, exception);
+      if (!event) return;
+
       const url = request.originalUrl || request.url;
-
       const user = request.user;
-
-      // Same skip policy as the success path: expected 4xx on auth-probe
-      // routes shouldn't pollute the log, and admin-origin requests are
-      // skipped entirely. 5xx is always kept.
-      if (
-        shouldSkipLogging(request.method, url, status, {
-          origin: request.headers['x-origin'],
-          role: user?.role,
-        })
-      ) {
-        return;
-      }
       const errorMessage =
         exception instanceof Error ? exception.message : String(exception);
       const errorStack =
         exception instanceof Error ? exception.stack : undefined;
 
-      // Only non-4xx client errors go to Sentry — don't flood with validation
-      // failures. Upstream quota is precious.
       let sentryEventId: string | undefined;
       if (status >= 500) {
         sentryEventId = this.sentryService.captureException(exception, {
@@ -109,29 +110,48 @@ export class AllExceptionsFilter implements ExceptionFilter {
         });
       }
 
-      const requestBody = shouldDropRequestBody(url)
-        ? null
-        : (sanitize(request.body) as object);
+      // For 5xx we keep the inbound body (helps debugging server crashes).
+      // For 4xx events we don't — the URL + status is enough.
+      const requestBody =
+        status >= 500 && !shouldDropRequestBody(url)
+          ? (sanitize(request.body) as never)
+          : undefined;
 
-      this.logsService.enqueue({
+      this.events.log(event, {
         level: status >= 500 ? LogLevel.ERROR : LogLevel.WARN,
-        source: 'backend',
         method: request.method,
         url,
         route: (request.route as { path?: string } | undefined)?.path,
         statusCode: status,
-        userId: user?.id,
-        userEmail: user?.email,
-        ip: request.ip,
-        userAgent: request.headers['user-agent'],
-        requestBody: requestBody as never,
-        requestQuery: sanitize(request.query) as never,
+        userId: user?.id ?? null,
+        userEmail: user?.email ?? null,
+        ip: request.ip ?? null,
+        userAgent: request.headers['user-agent'] ?? null,
+        requestBody,
         errorMessage,
-        errorStack,
-        sentryEventId,
+        errorStack: errorStack ?? null,
+        sentryEventId: sentryEventId ?? null,
       });
     } catch (err) {
       this.logger.error('Failed to log exception', err as Error);
     }
   }
+}
+
+// HttpStatus values cast to plain number for comparison — eslint's
+// `no-unsafe-enum-comparison` rule fires otherwise because we receive
+// the `status` arg as a plain `number`, not the `HttpStatus` enum type.
+const STATUS_FORBIDDEN: number = HttpStatus.FORBIDDEN;
+const STATUS_TOO_MANY_REQUESTS: number = HttpStatus.TOO_MANY_REQUESTS;
+
+function pickEventFor(status: number, exception: unknown): EventName | null {
+  if (status >= 500) return EVENTS.ERROR_5XX;
+  if (status === STATUS_FORBIDDEN) return EVENTS.AUTHZ_DENIED;
+  if (status === STATUS_TOO_MANY_REQUESTS) return EVENTS.RATELIMIT_HIT;
+  // 401 / 404 / 400 / 422 / etc. → not interesting at this scope, skip.
+  // We still surface them via stdout, just not via a DB row.
+  // (kept the `exception` param because we may extend this later to
+  // recognise specific BaseAppException subclasses.)
+  void exception;
+  return null;
 }

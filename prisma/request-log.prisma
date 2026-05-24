@@ -4,8 +4,21 @@ enum LogLevel {
   ERROR
 }
 
+/// One row per *meaningful event* — auth flow milestones, security events,
+/// errors, slow requests, business mutations. NOT one row per HTTP request:
+/// access-log noise lives in stdout / docker logs / the metrics dashboard,
+/// not in this table. Volume target: tens-to-hundreds of rows per day,
+/// not thousands.
+///
+/// `event` is the dotted-namespace event name (e.g. `auth.login.success`,
+/// `error.5xx`, `perf.slow_request`). It's the primary thing admins filter
+/// on. `method/url/route/statusCode/durationMs` stay because access-derived
+/// events still want them — but plenty of events (e.g. cron-triggered)
+/// won't have them, hence nullable.
 model RequestLog {
   id            String   @id @default(uuid())
+  /// Dotted-namespace event name. NULL only on legacy rows; new code MUST set it.
+  event         String?
   level         LogLevel @default(INFO)
   source        String
   method        String
@@ -17,8 +30,15 @@ model RequestLog {
   userEmail     String?
   ip            String?
   userAgent     String?
+  /// Structured metadata for the event (workspaceId, projectId, target,
+  /// resource counts, etc.). Replaces the old per-request body dumps —
+  /// keep the payload small + intentional so admin queries stay fast.
+  metadata      Json?
+  /// Kept for the small set of events that still want the inbound body
+  /// (auth login attempts, etc.). Default: null. Sanitized before write.
   requestBody   Json?
   requestQuery  Json?
+  /// Kept for ERROR events. Always null for INFO/WARN events.
   responseBody  Json?
   errorMessage  String?
   errorStack    String?  @db.Text
@@ -27,6 +47,7 @@ model RequestLog {
   createdAt     DateTime @default(now())
 
   @@index([createdAt])
+  @@index([event, createdAt])
   @@index([userId, createdAt])
   @@index([level, createdAt])
   @@index([statusCode])

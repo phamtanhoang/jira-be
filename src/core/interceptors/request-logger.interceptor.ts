@@ -4,28 +4,32 @@ import {
   Injectable,
   NestInterceptor,
 } from '@nestjs/common';
-import { LogLevel } from '@prisma/client';
 import type { Request, Response } from 'express';
 import { Observable, tap } from 'rxjs';
 import { AuthUser } from '@/core/types';
 import {
-  sanitize,
-  shouldDropRequestBody,
-  shouldSkipLogging,
-  shouldSkipResponseBody,
-} from '@/core/utils';
-import { LogsService } from '@/modules/logs/logs.service';
+  EventLoggerService,
+  EVENTS,
+} from '@/modules/logs/event-logger.service';
 
 /**
- * Logs every successful request (and records duration).
- * Error path is handled by AllExceptionsFilter — this interceptor only
- * runs the `tap` branch for the success stream.
+ * Slow-request watchdog (the only thing this interceptor is responsible
+ * for since the event-log refactor).
  *
- * Registered globally via APP_INTERCEPTOR in AppModule.
+ * Before: every successful request → 1 row in RequestLog. Most rows were
+ * polling traffic that nobody ever read. Result: 10k+ rows/day on a small
+ * tenant.
+ *
+ * After: we only emit a `perf.slow_request` event when latency exceeds
+ * `SLOW_REQUEST_THRESHOLD_MS`. Business events live in dedicated emit
+ * sites (auth controller, etc.), not as a side effect of HTTP requests.
+ * Access-log noise lives in `docker logs` / stdout, not in the DB.
  */
+const SLOW_REQUEST_THRESHOLD_MS = 2000;
+
 @Injectable()
 export class RequestLoggerInterceptor implements NestInterceptor {
-  constructor(private logsService: LogsService) {}
+  constructor(private events: EventLoggerService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const http = context.switchToHttp();
@@ -35,61 +39,36 @@ export class RequestLoggerInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap({
-        next: (data: unknown) => {
-          this.safeLog(request, response, data, start);
+        next: () => {
+          const duration = Date.now() - start;
+          if (duration < SLOW_REQUEST_THRESHOLD_MS) return;
+          this.safeLogSlow(request, response, duration);
         },
       }),
     );
   }
 
-  private safeLog(
+  private safeLogSlow(
     request: Request & { user?: AuthUser },
     response: Response,
-    data: unknown,
-    start: number,
+    duration: number,
   ) {
     try {
-      const url = request.originalUrl || request.url;
       const user = request.user;
-
-      // Drop noisy successful polls (me/refresh/app-info/admin stats/...)
-      // and anything originating from admin UI. Failures still log unless
-      // they're expected flow (auth 401 on refresh, etc.)
-      if (
-        shouldSkipLogging(request.method, url, response.statusCode, {
-          origin: request.headers['x-origin'],
-          role: user?.role,
-        })
-      ) {
-        return;
-      }
-
-      const requestBody = shouldDropRequestBody(url)
-        ? null
-        : (sanitize(request.body) as object);
-
-      const responseBody = shouldSkipResponseBody(url)
-        ? null
-        : (sanitize(data) as object);
-
-      this.logsService.enqueue({
-        level: LogLevel.INFO,
-        source: 'backend',
+      this.events.log(EVENTS.PERF_SLOW_REQUEST, {
         method: request.method,
-        url,
+        url: request.originalUrl || request.url,
         route: (request.route as { path?: string } | undefined)?.path,
         statusCode: response.statusCode,
-        durationMs: Date.now() - start,
-        userId: user?.id,
-        userEmail: user?.email,
-        ip: request.ip,
-        userAgent: request.headers['user-agent'],
-        requestBody: requestBody as never,
-        requestQuery: sanitize(request.query) as never,
-        responseBody: responseBody as never,
+        durationMs: duration,
+        userId: user?.id ?? null,
+        userEmail: user?.email ?? null,
+        ip: request.ip ?? null,
+        userAgent: request.headers['user-agent'] ?? null,
+        metadata: { thresholdMs: SLOW_REQUEST_THRESHOLD_MS },
       });
     } catch {
-      // Swallow — logging must never break the request
+      // Swallow — logging must never break the request.
     }
   }
 }

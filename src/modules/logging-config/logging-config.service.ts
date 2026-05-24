@@ -81,9 +81,11 @@ export class LoggingConfigService implements OnModuleInit {
     }
   }
 
-  // Periodic refresh catches setting changes that bypass setByKey()
-  // (e.g. someone edits the row directly via Prisma Studio).
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  // Periodic refresh catches setting changes that bypass setByKey() — e.g.
+  // someone edits the row directly via Prisma Studio. Toggles are admin-
+  // rare-write, so a 1-hour cadence is plenty + saves cron-driven Neon
+  // compute. The admin UI still triggers an immediate refresh on save.
+  @Cron(CronExpression.EVERY_HOUR)
   async scheduledRefresh() {
     await this.refresh();
   }

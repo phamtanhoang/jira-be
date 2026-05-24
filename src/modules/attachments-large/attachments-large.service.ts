@@ -29,6 +29,10 @@ import {
   uploadChunkObject,
   uploadFile,
 } from '@/core/utils';
+import {
+  EventLoggerService,
+  EVENTS,
+} from '@/modules/logs/event-logger.service';
 import { SettingsService } from '@/modules/settings/settings.service';
 import { InitLargeUploadDto } from './dto';
 
@@ -39,6 +43,7 @@ export class AttachmentsLargeService {
   constructor(
     private prisma: PrismaService,
     private settings: SettingsService,
+    private events: EventLoggerService,
   ) {}
 
   async init(userId: string, dto: InitLargeUploadDto) {
@@ -279,10 +284,11 @@ export class AttachmentsLargeService {
     void deleteChunkObjects(sessionId, session.totalChunks);
   }
 
-  // Sweep every 5 minutes — short enough that abandoned uploads don't pile
-  // storage cost, long enough that legitimate resume traffic always finds
-  // its session.
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  // Sweep every 30 minutes — Neon free-tier compute charges by the hour,
+  // so a 5-min cron alone keeps the DB warm 24/7 even when no users are
+  // active. 30 min is still way under the 1-hour session TTL — orphaned
+  // uploads still get cleaned promptly, but the DB gets long idle windows.
+  @Cron(CronExpression.EVERY_30_MINUTES)
   async sweepExpiredSessions() {
     const now = new Date();
     const expired = await this.prisma.uploadSession.findMany({
@@ -458,6 +464,15 @@ export class AttachmentsLargeService {
     const used = Number(result[0]?.bytes ?? 0);
     const limit = quotas.maxStorageGB * 1024 * 1024 * 1024;
     if (used + incomingBytes > limit) {
+      this.events.log(EVENTS.QUOTA_EXCEEDED, {
+        metadata: {
+          quota: 'storage',
+          workspaceId,
+          limitBytes: limit,
+          usedBytes: used,
+          requestedBytes: incomingBytes,
+        },
+      });
       throw new ForbiddenException(MSG.ERROR.QUOTA_STORAGE_REACHED);
     }
   }

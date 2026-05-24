@@ -136,37 +136,25 @@ export class AdminHealthService {
    * - "degraded"  — DB ok, cache configured but failing (still serving traffic).
    * - "down"      — DB unreachable. Caller treats as failure.
    */
-  async getPublicHealth(): Promise<{
-    status: 'ok' | 'degraded' | 'down';
+  /**
+   * Liveness probe — designed to be HIT EVERY 30s by Docker healthcheck.
+   * To avoid keeping the Neon free-tier compute alive forever, we DO NOT
+   * query the database here. Process responsiveness is enough — if BE
+   * has crashed, this whole HTTP handler never runs.
+   *
+   * Real DB liveness check still lives on the admin-only `GET /admin/health`
+   * (in `AdminHealthService.getHealth()`) which probes DB + cache fully.
+   * That endpoint is rare (only opened by admins) so it's fine to query.
+   */
+  getPublicHealth(): {
+    status: 'ok';
     timestamp: string;
     uptimeSec: number;
-    db: 'ok' | 'down';
-    cache: 'ok' | 'down' | 'disabled';
-  }> {
-    const dbOk = await this.prisma.$queryRaw`SELECT 1`
-      .then(() => true)
-      .catch(() => false);
-
-    let cacheStatus: 'ok' | 'down' | 'disabled' = 'disabled';
-    if (!ENV.CACHE_DISABLED) {
-      cacheStatus = await this.cache
-        .set('__health_probe_pub__', '1', 1000)
-        .then(() => 'ok' as const)
-        .catch(() => 'down' as const);
-    }
-
-    const status: 'ok' | 'degraded' | 'down' = !dbOk
-      ? 'down'
-      : cacheStatus === 'down'
-        ? 'degraded'
-        : 'ok';
-
+  } {
     return {
-      status,
+      status: 'ok',
       timestamp: new Date().toISOString(),
       uptimeSec: Math.round(process.uptime()),
-      db: dbOk ? 'ok' : 'down',
-      cache: cacheStatus,
     };
   }
 }

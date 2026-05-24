@@ -13,6 +13,12 @@ import {
 } from 'class-validator';
 
 export class QueryLogsDto {
+  /** Filter by exact event name (e.g. "auth.login.success"). */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  event?: string;
+
   @ApiPropertyOptional({ enum: LogLevel })
   @IsOptional()
   @IsEnum(LogLevel)

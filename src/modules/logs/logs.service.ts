@@ -87,6 +87,7 @@ export class LogsService implements OnModuleInit, OnModuleDestroy {
     const page = Math.max(1, query.page ?? 1);
     const where: Prisma.RequestLogWhereInput = {};
 
+    if (query.event) where.event = query.event;
     if (query.level) where.level = query.level;
     if (query.method) where.method = query.method.toUpperCase();
     if (query.statusCode !== undefined) where.statusCode = query.statusCode;

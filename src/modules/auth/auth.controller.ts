@@ -35,6 +35,10 @@ import {
 } from '@/core/constants';
 import { CurrentUser, Public } from '@/core/decorators';
 import { AuthUser } from '@/core/types';
+import {
+  EventLoggerService,
+  EVENTS,
+} from '@/modules/logs/event-logger.service';
 import { SettingsService } from '@/modules/settings/settings.service';
 import { AuthService, type SessionMeta } from './auth.service';
 import {
@@ -60,14 +64,21 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private settings: SettingsService,
+    private events: EventLoggerService,
   ) {}
 
   @Public()
   @Post(E.REGISTER)
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Register a new user' })
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  async register(@Body() dto: RegisterDto, @Req() req: Request) {
+    const result = await this.authService.register(dto);
+    this.events.log(EVENTS.AUTH_SIGNUP, {
+      ip: req.ip ?? null,
+      userAgent: req.headers['user-agent'] ?? null,
+      metadata: { email: dto.email },
+    });
+    return result;
   }
 
   @Public()
@@ -77,8 +88,13 @@ export class AuthController {
   // brute-forcing the 6-digit code.
   @Throttle({ default: { ttl: 300000, limit: 5 } })
   @ApiOperation({ summary: 'Verify email with 6-digit OTP' })
-  verifyEmail(@Body() dto: VerifyEmailDto) {
-    return this.authService.verifyEmail(dto);
+  async verifyEmail(@Body() dto: VerifyEmailDto, @Req() req: Request) {
+    const result = await this.authService.verifyEmail(dto);
+    this.events.log(EVENTS.AUTH_EMAIL_VERIFIED, {
+      ip: req.ip ?? null,
+      metadata: { email: dto.email },
+    });
+    return result;
   }
 
   @Public()
@@ -97,7 +113,29 @@ export class AuthController {
     if (!providers.password) {
       throw new UnauthorizedException(MSG.ERROR.PASSWORD_LOGIN_DISABLED);
     }
-    const tokens = await this.authService.login(dto, extractSessionMeta(req));
+    let tokens;
+    try {
+      tokens = await this.authService.login(dto, extractSessionMeta(req));
+    } catch (err) {
+      // Security event — failed login attempts deserve audit even when
+      // we just throw 401 to the user. Email is in the request body
+      // (sanitized of password by global pipe / class-transformer).
+      this.events.log(EVENTS.AUTH_LOGIN_FAILED, {
+        ip: req.ip ?? null,
+        userAgent: req.headers['user-agent'] ?? null,
+        metadata: {
+          email: dto.email,
+          reason: err instanceof Error ? err.message : 'unknown',
+        },
+      });
+      throw err;
+    }
+
+    this.events.log(EVENTS.AUTH_LOGIN_SUCCESS, {
+      userEmail: dto.email,
+      ip: req.ip ?? null,
+      userAgent: req.headers['user-agent'] ?? null,
+    });
 
     res.cookie(
       COOKIE_KEYS.ACCESS_TOKEN,
@@ -152,7 +190,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Logout and clear tokens' })
-  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @CurrentUser() user: AuthUser | undefined,
+  ) {
     const cookies = req.cookies as Record<string, string> | undefined;
     const refreshToken = cookies?.[COOKIE_KEYS.REFRESH_TOKEN];
     if (refreshToken) {
@@ -162,6 +204,12 @@ export class AuthController {
     res.clearCookie(COOKIE_KEYS.ACCESS_TOKEN);
     res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, { path: '/' });
 
+    this.events.log(EVENTS.AUTH_LOGOUT, {
+      userId: user?.id ?? null,
+      userEmail: user?.email ?? null,
+      ip: req.ip ?? null,
+    });
+
     return { message: MSG.SUCCESS.LOGOUT };
   }
 
@@ -170,16 +218,26 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { ttl: 60000, limit: 3 } })
   @ApiOperation({ summary: 'Send reset password OTP' })
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto);
+  async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
+    const result = await this.authService.forgotPassword(dto);
+    this.events.log(EVENTS.AUTH_PASSWORD_RESET_REQUESTED, {
+      ip: req.ip ?? null,
+      metadata: { email: dto.email },
+    });
+    return result;
   }
 
   @Public()
   @Post(E.RESET_PASSWORD)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password with OTP' })
-  resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto);
+  async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
+    const result = await this.authService.resetPassword(dto);
+    this.events.log(EVENTS.AUTH_PASSWORD_CHANGED, {
+      ip: req.ip ?? null,
+      metadata: { email: dto.email, via: 'reset' },
+    });
+    return result;
   }
 
   // ─── OAuth ─────────────────────────────────────────────
@@ -318,11 +376,19 @@ export class AuthController {
   @ApiOperation({
     summary: 'Change current user password (requires current password)',
   })
-  changePassword(
+  async changePassword(
     @CurrentUser() user: AuthUser,
     @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
   ) {
-    return this.authService.changePassword(user.id, dto);
+    const result = await this.authService.changePassword(user.id, dto);
+    this.events.log(EVENTS.AUTH_PASSWORD_CHANGED, {
+      userId: user.id,
+      userEmail: user.email,
+      ip: req.ip ?? null,
+      metadata: { via: 'self-change' },
+    });
+    return result;
   }
 
   @Post('avatar')
