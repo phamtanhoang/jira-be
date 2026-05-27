@@ -13,6 +13,7 @@ export default tseslint.config(
       'coverage/**',
       'prisma.config.js',
       'prisma.config.d.ts',
+      '.claude/**',
     ],
   },
   eslint.configs.recommended,
