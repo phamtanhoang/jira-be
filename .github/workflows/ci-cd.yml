@@ -129,8 +129,7 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd ~/projects/jira/jira-be
-            git pull origin main
+            cd ~/jira/jira-be
             docker pull ${{ env.DOCKER_IMAGE }}:latest
             docker compose up -d --force-recreate
             docker image prune -f

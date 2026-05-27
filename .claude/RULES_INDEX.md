@@ -56,6 +56,7 @@ Read the relevant rule before changing code in that area.
 | [throttle.md](rules/throttle.md) | Adding `@Throttle()` to a new route |
 | [upload.md](rules/upload.md) | Adding a file-upload endpoint |
 | [webhook-events.md](rules/webhook-events.md) | Adding a webhook event or modifying dispatch |
+| [prompt-defense.md](rules/prompt-defense.md) | Processing untrusted content (URLs, issue bodies, user-submitted text) |
 
 ### `agents/` — specialized assistants
 
@@ -87,6 +88,20 @@ Invoke via `/<name>` at the Claude Code prompt.
 | [/migrate](commands/migrate.md) | Apply pending Prisma migration to prod |
 | [/seed](commands/seed.md) | Run `prisma db seed` (idempotent) |
 | [/diagnose-prod](commands/diagnose-prod.md) | Triage prod issue step-by-step |
+| [/quality-gate](commands/quality-gate.md) | Run typecheck + lint + test before commit |
+| [/checkpoint](commands/checkpoint.md) | Mid-feature commit with Conventional Commits |
+| [/learn](commands/learn.md) | Capture a non-obvious decision into memory.md |
+| [/security-scan](commands/security-scan.md) | Scan for leaked secrets in `.claude/` + config |
+
+### `hooks/` — trigger-based automations
+
+| Hook | Event | Purpose |
+|---|---|---|
+| `session-start.js` | `SessionStart` | Print branch + commits + recent migrations |
+| `post-edit-prisma.js` | `PostToolUse` on `prisma/*.prisma` | Remind to run `migrate dev` |
+| `post-edit-sensitive.js` | `PostToolUse` on `*.dto.ts` | Remind to update `SENSITIVE_KEYS` |
+
+See [hooks/README.md](hooks/README.md) for the contract.
 
 ### `specs/` — historical decisions
 
