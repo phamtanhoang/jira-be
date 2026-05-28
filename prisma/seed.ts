@@ -61,9 +61,9 @@ const VERIFICATION_EMAIL_HTML = `<!DOCTYPE html>
       <td align="center">
         <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#ffffff;border-radius:12px;box-shadow:0 2px 12px rgba(9,30,66,0.08);overflow:hidden;">
           <tr>
-            <td style="background:linear-gradient(135deg,#0052cc 0%,#2684ff 100%);padding:28px 40px;text-align:center;">
-              <img src="{{logoUrl}}" alt="{{appName}}" width="36" height="36" style="display:inline-block;vertical-align:middle;margin-right:10px;border:0;border-radius:8px;background:#ffffff;" />
-              <span style="color:#ffffff;font-size:22px;font-weight:700;vertical-align:middle;letter-spacing:-0.3px;">{{appName}}</span>
+            <td style="background:#ffffff;padding:28px 40px;text-align:center;border-bottom:1px solid #ebecf0;">
+              <img src="{{logoUrl}}" alt="{{appName}}" width="36" height="36" style="display:inline-block;vertical-align:middle;margin-right:10px;border:0;border-radius:8px;" />
+              <span style="color:#172b4d;font-size:22px;font-weight:700;vertical-align:middle;letter-spacing:-0.3px;">{{appName}}</span>
             </td>
           </tr>
           <tr>
@@ -91,8 +91,8 @@ const VERIFICATION_EMAIL_HTML = `<!DOCTYPE html>
             </td>
           </tr>
           <tr>
-            <td style="padding:20px 40px;background:#fafbfc;border-top:1px solid #ebecf0;text-align:center;">
-              <p style="margin:0;font-size:12px;color:#7a869a;">
+            <td style="padding:20px 40px;background:linear-gradient(135deg,#0052cc 0%,#2684ff 100%);text-align:center;">
+              <p style="margin:0;font-size:12px;color:#ffffff;opacity:0.9;">
                 © {{appName}} — automated message, please do not reply.
               </p>
             </td>
@@ -118,9 +118,9 @@ const RESET_PASSWORD_EMAIL_HTML = `<!DOCTYPE html>
       <td align="center">
         <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#ffffff;border-radius:12px;box-shadow:0 2px 12px rgba(9,30,66,0.08);overflow:hidden;">
           <tr>
-            <td style="background:linear-gradient(135deg,#de350b 0%,#ff7452 100%);padding:28px 40px;text-align:center;">
-              <img src="{{logoUrl}}" alt="{{appName}}" width="36" height="36" style="display:inline-block;vertical-align:middle;margin-right:10px;border:0;border-radius:8px;background:#ffffff;" />
-              <span style="color:#ffffff;font-size:22px;font-weight:700;vertical-align:middle;letter-spacing:-0.3px;">{{appName}}</span>
+            <td style="background:#ffffff;padding:28px 40px;text-align:center;border-bottom:1px solid #ebecf0;">
+              <img src="{{logoUrl}}" alt="{{appName}}" width="36" height="36" style="display:inline-block;vertical-align:middle;margin-right:10px;border:0;border-radius:8px;" />
+              <span style="color:#172b4d;font-size:22px;font-weight:700;vertical-align:middle;letter-spacing:-0.3px;">{{appName}}</span>
             </td>
           </tr>
           <tr>
@@ -157,8 +157,8 @@ const RESET_PASSWORD_EMAIL_HTML = `<!DOCTYPE html>
             </td>
           </tr>
           <tr>
-            <td style="padding:20px 40px;background:#fafbfc;border-top:1px solid #ebecf0;text-align:center;">
-              <p style="margin:0;font-size:12px;color:#7a869a;">
+            <td style="padding:20px 40px;background:linear-gradient(135deg,#de350b 0%,#ff7452 100%);text-align:center;">
+              <p style="margin:0;font-size:12px;color:#ffffff;opacity:0.9;">
                 © {{appName}} — automated message, please do not reply.
               </p>
             </td>
@@ -184,9 +184,9 @@ const WELCOME_EMAIL_HTML = `<!DOCTYPE html>
       <td align="center">
         <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:12px;box-shadow:0 2px 12px rgba(9,30,66,0.08);overflow:hidden;">
           <tr>
-            <td style="background:linear-gradient(135deg,#00875a 0%,#36b37e 100%);padding:32px 40px;text-align:center;">
-              <img src="{{logoUrl}}" alt="{{appName}}" width="40" height="40" style="display:inline-block;vertical-align:middle;margin-right:12px;border:0;border-radius:8px;background:#ffffff;" />
-              <span style="color:#ffffff;font-size:24px;font-weight:700;vertical-align:middle;letter-spacing:-0.3px;">{{appName}}</span>
+            <td style="background:#ffffff;padding:32px 40px;text-align:center;border-bottom:1px solid #ebecf0;">
+              <img src="{{logoUrl}}" alt="{{appName}}" width="40" height="40" style="display:inline-block;vertical-align:middle;margin-right:12px;border:0;border-radius:8px;" />
+              <span style="color:#172b4d;font-size:24px;font-weight:700;vertical-align:middle;letter-spacing:-0.3px;">{{appName}}</span>
             </td>
           </tr>
           <tr>
@@ -230,8 +230,8 @@ const WELCOME_EMAIL_HTML = `<!DOCTYPE html>
             </td>
           </tr>
           <tr>
-            <td style="padding:20px 40px;background:#fafbfc;border-top:1px solid #ebecf0;text-align:center;">
-              <p style="margin:0;font-size:12px;color:#7a869a;">
+            <td style="padding:20px 40px;background:linear-gradient(135deg,#00875a 0%,#36b37e 100%);text-align:center;">
+              <p style="margin:0;font-size:12px;color:#ffffff;opacity:0.9;">
                 Sent to {{recipientEmail}} · © {{appName}}
               </p>
             </td>

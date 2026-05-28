@@ -132,6 +132,14 @@ export class AuthService {
       }),
     ]);
 
+    // Fire-and-forget welcome — never block the verify response. Failure
+    // here (SMTP down, provider rate-limit) must not surface as "email not
+    // verified" to the user, who genuinely IS verified at this point.
+    void this.mail.sendWelcomeEmail(user.email).catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`welcome email failed for ${user.email}: ${msg}`);
+    });
+
     return { message: MSG.SUCCESS.EMAIL_VERIFIED };
   }
 

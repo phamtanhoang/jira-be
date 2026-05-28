@@ -47,8 +47,8 @@ export class MailTemplateTestDto {
   to!: string;
 
   @ApiPropertyOptional({
-    description: 'Which template to send: verification | resetPassword',
+    description: 'Which template to send: verification | resetPassword | welcome',
   })
-  @IsEnum(['verification', 'resetPassword'] as const)
-  template!: 'verification' | 'resetPassword';
+  @IsEnum(['verification', 'resetPassword', 'welcome'] as const)
+  template!: 'verification' | 'resetPassword' | 'welcome';
 }

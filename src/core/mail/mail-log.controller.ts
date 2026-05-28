@@ -104,8 +104,10 @@ export class MailLogController {
     const sampleOtp = '123456';
     if (dto.template === 'verification') {
       await this.mail.sendVerificationEmail(dto.to, sampleOtp);
-    } else {
+    } else if (dto.template === 'resetPassword') {
       await this.mail.sendResetPasswordEmail(dto.to, sampleOtp);
+    } else {
+      await this.mail.sendWelcomeEmail(dto.to);
     }
     return { message: MSG.SUCCESS.MAIL_TEST_SENT };
   }

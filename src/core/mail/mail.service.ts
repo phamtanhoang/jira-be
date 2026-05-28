@@ -376,4 +376,47 @@ export class MailService {
       type: MailType.PASSWORD_RESET,
     });
   }
+
+  /**
+   * Fires once per user, right after they successfully verify their email.
+   * No OTP or expiry — `otp` / `expiryMinutes` are passed empty so any
+   * `{{otp}}` left in an admin-edited template renders as blank rather than
+   * leaking a sample code.
+   *
+   * MailType is `OTHER` until the enum grows a `WELCOME` value (avoiding an
+   * enum migration during the current stabilization phase).
+   */
+  async sendWelcomeEmail(email: string): Promise<void> {
+    const appInfo = await this.getAppInfo();
+    const override = await this.getTemplateOverride('welcome');
+    const vars = {
+      appName: appInfo.name ?? '',
+      logoUrl: appInfo.logoUrl ?? '',
+      otp: '',
+      expiryMinutes: '',
+      recipientEmail: email,
+    };
+    await this.send({
+      to: email,
+      subject: override.subject
+        ? this.renderTemplate(override.subject, vars)
+        : `Welcome to ${vars.appName || 'Jira Clone'}!`,
+      html: override.html
+        ? this.renderTemplate(override.html, vars)
+        : welcomeFallbackHtml(vars),
+      type: MailType.OTHER,
+    });
+  }
+}
+
+function welcomeFallbackHtml(vars: {
+  appName: string;
+  recipientEmail: string;
+}): string {
+  const name = vars.appName || 'Jira Clone';
+  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;max-width:480px;margin:24px auto;padding:0 16px;color:#172b4d">
+    <h2>Welcome to ${name}!</h2>
+    <p>Hi, your account <strong>${vars.recipientEmail}</strong> is now verified and ready to use.</p>
+    <p>Sign in to get started.</p>
+  </body></html>`;
 }
