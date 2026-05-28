@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { DAY_MS, ENV } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { MailService } from '@/core/mail/mail.service';
@@ -24,7 +24,11 @@ export class DigestService {
     private mail: MailService,
   ) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_8AM, { name: 'notification-digest' })
+  // Disabled (schedule = never-fires expression) for the personal /
+  // CV-showcase deployment. The daily digest scans every user's unread
+  // notifications, which is overkill when there's only one user. Re-enable
+  // with `CronExpression.EVERY_DAY_AT_8AM` when the app has real users.
+  @Cron('0 0 0 1 1 *', { name: 'notification-digest' })
   async runDailyDigest() {
     if (ENV.IS_TEST) return; // never run during unit tests
 

@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import {
   ActivityAction,
   IssuePriority,
@@ -137,7 +137,12 @@ export class RecurringIssuesService {
 
   // ─── Cron ───────────────────────────────────────────────
 
-  @Cron(CronExpression.EVERY_HOUR, { name: 'recurring-issues' })
+  // Disabled by setting schedule to "00:00 every Jan 1" — effectively
+  // never runs. Personal/CV app doesn't have recurring rules yet, so the
+  // hourly findMany wakes Neon free-tier compute for nothing. Re-enable
+  // by restoring `CronExpression.EVERY_HOUR` (or `EVERY_6_HOURS` if low
+  // urgency is acceptable) once the feature is actually used.
+  @Cron('0 0 0 1 1 *', { name: 'recurring-issues' })
   async runDueRules() {
     if (ENV.IS_TEST) return;
     const now = new Date();

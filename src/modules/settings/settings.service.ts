@@ -38,7 +38,11 @@ export class SettingsService {
         if (!setting) throw new NotFoundException(MSG.ERROR.APP_INFO_NOT_FOUND);
         return setting.value;
       },
-      /* ttlSec */ 600,
+      // 1h TTL — app.info changes (logo, name) are admin-rare-write, and
+      // every miss is a Neon free-tier DB query. The `settings` cache tag
+      // is invalidated explicitly on save so admins still see immediate
+      // effect; a longer TTL just shifts the cost of misses, not freshness.
+      /* ttlSec */ 3600,
     );
   }
 
