@@ -134,6 +134,21 @@ jobs:
             docker compose up -d --force-recreate
             docker image prune -f
 
+      - name: Verify deployment (health check)
+        run: |
+          echo "Waiting for BE to be ready..."
+          sleep 15
+          for i in 1 2 3 4 5 6; do
+            if curl -sf https://api.jira.3hteam.io.vn/health > /dev/null; then
+              echo "✅ Health check passed (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i/6 failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "❌ Health check failed after 75s — BE not responding 200 on /health"
+          exit 1
+
   # ─────────── Job 5: Consolidated Telegram notification ───────────
   notify:
     name: Notify Telegram
