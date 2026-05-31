@@ -30,6 +30,7 @@ import {
   MSG,
   UPLOAD_LIMITS,
   accessTokenCookieOptions,
+  clearCookieOptions,
   fePublicCookieOptions,
   refreshTokenCookieOptions,
 } from '@/core/constants';
@@ -201,8 +202,8 @@ export class AuthController {
       await this.authService.logout(refreshToken);
     }
 
-    res.clearCookie(COOKIE_KEYS.ACCESS_TOKEN);
-    res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, { path: '/' });
+    res.clearCookie(COOKIE_KEYS.ACCESS_TOKEN, clearCookieOptions());
+    res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, clearCookieOptions('/'));
 
     this.events.log(EVENTS.AUTH_LOGOUT, {
       userId: user?.id ?? null,
@@ -447,8 +448,8 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const count = await this.authService.revokeAllMySessions(user.id);
-    res.clearCookie(COOKIE_KEYS.ACCESS_TOKEN);
-    res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, { path: '/' });
+    res.clearCookie(COOKIE_KEYS.ACCESS_TOKEN, clearCookieOptions());
+    res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, clearCookieOptions('/'));
     return { message: MSG.SUCCESS.SESSIONS_REVOKED, count };
   }
 

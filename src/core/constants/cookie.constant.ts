@@ -14,10 +14,17 @@ export const COOKIE_KEYS = {
 
 const isProduction = ENV.NODE_ENV === 'production';
 
+// Empty in localhost dev → cookies stay host-only on BE domain.
+// In prod (split subdomain BE/FE) set `COOKIE_DOMAIN=.example.com` so the
+// OAuth callback's Set-Cookie is readable on both `api.example.com` and
+// `example.com`.
+const cookieDomain = ENV.COOKIE_DOMAIN || undefined;
+
 const BASE_OPTIONS = {
   httpOnly: true,
   secure: isProduction,
   sameSite: 'lax' as const,
+  ...(cookieDomain && { domain: cookieDomain }),
 };
 
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
@@ -44,4 +51,15 @@ export const fePublicCookieOptions = () => ({
   sameSite: 'lax' as const,
   path: '/',
   maxAge: ONE_YEAR_SECONDS * 1000,
+  ...(cookieDomain && { domain: cookieDomain }),
+});
+
+/**
+ * Match-pair for `res.clearCookie` — browsers refuse to clear a cookie
+ * whose domain attribute differs from the original Set-Cookie. Pair every
+ * clearCookie call site with this so logout/session-revoke actually wipe.
+ */
+export const clearCookieOptions = (path: string = '/') => ({
+  path,
+  ...(cookieDomain && { domain: cookieDomain }),
 });

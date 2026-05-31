@@ -59,6 +59,14 @@ export const ENV = {
   // Defaults to the first CORS_ORIGIN entry if unset.
   FRONTEND_URL: process.env.FRONTEND_URL ?? '',
 
+  // ─── Auth cookie domain ──────────────────────────────────
+  // Set when BE and FE live on different subdomains (e.g.
+  // `api.example.com` + `example.com`) so cookies the BE sets in the
+  // OAuth callback are readable on the FE subdomain. Use a leading dot
+  // to share across all subdomains: `.example.com`. Leave empty in
+  // single-domain / localhost dev so cookies stay host-only.
+  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN ?? '',
+
   // ─── Web Push (VAPID) ────────────────────────────────────
   // When VAPID_PUBLIC_KEY is empty, push module stays dormant — endpoints
   // 503 instead of failing silently. Subject must be `mailto:` or https URL.
