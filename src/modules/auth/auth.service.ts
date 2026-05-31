@@ -176,10 +176,26 @@ export class AuthService {
   }
 
   /**
-   * OAuth login: upsert by email so an existing password account silently
-   * links to the same user when they SSO with the matching email. New users
-   * land here with no password (Google/GitHub becomes their only sign-in
-   * method until they set one via password reset).
+   * OAuth login: matches existing accounts by email so an already-verified
+   * password account silently links to its Google/GitHub identity. New
+   * users land here with no password — they can set one later via the
+   * forgot-password flow (which doubles as "establish a password" for
+   * OAuth-only users).
+   *
+   * Safety rails (match what NextAuth/Auth0/Clerk do):
+   *  1. OAuth provider MUST share an email — empty email is rejected so we
+   *     never link to / create a `''` user (would collide on next signup).
+   *  2. Silent link is REFUSED when an existing password account hasn't
+   *     verified its email yet. The unverified row is a stub anyone could
+   *     have created; flipping verified=true on OAuth would hand the OAuth
+   *     identity to whoever pre-registered. Caller is told to verify the
+   *     OTP first.
+   *  3. Inactive accounts cannot login via OAuth either — same rule as
+   *     password login.
+   *
+   * Returns extra flags so the controller can fire the appropriate
+   * one-shot side effects (welcome email, "we linked Google" notice, audit
+   * event) without re-deriving the state from the user row.
    */
   async loginWithOAuth(
     profile: {
@@ -191,59 +207,96 @@ export class AuthService {
     },
     meta?: SessionMeta,
   ) {
+    if (!profile.email?.trim()) {
+      // Happens when a GitHub user keeps their primary email private and
+      // hasn't granted `user:email` scope, or any provider that omits email.
+      // Without email we cannot safely identify the user — refuse rather
+      // than mint an anonymous row.
+      throw new BadRequestException(MSG.ERROR.OAUTH_EMAIL_REQUIRED);
+    }
     const email = profile.email.toLowerCase();
-    let user = await this.prisma.user.findUnique({ where: { email } });
+    const existing = await this.prisma.user.findUnique({ where: { email } });
 
-    if (!user) {
+    let user = existing;
+    let wasNewUser = false;
+
+    if (!existing) {
       user = await this.prisma.user.create({
         data: {
           email,
           name: profile.name,
           image: profile.image,
-          // OAuth-issued accounts are pre-verified — the provider already
-          // confirmed the email.
+          // OAuth provider already confirmed the email — pre-verify so the
+          // user doesn't need to OTP-verify a second time.
           emailVerified: new Date(),
         },
       });
-    } else if (!user.active) {
+      wasNewUser = true;
+    } else if (!existing.active) {
       throw new UnauthorizedException(MSG.ERROR.ACCOUNT_DEACTIVATED);
-    } else if (!user.emailVerified) {
-      // Existing account still pending email-OTP verification: the OAuth
-      // success itself proves email ownership, so flip the flag now.
+    } else if (!existing.emailVerified && existing.password) {
+      // Pre-registered password stub that never verified. Auto-flipping
+      // verified=true here would let the OAuth caller take over an account
+      // they didn't create. Force them through OTP verification first.
+      throw new UnauthorizedException(MSG.ERROR.OAUTH_VERIFY_EMAIL_FIRST);
+    } else if (!existing.emailVerified) {
+      // OAuth-only stub (no password) that somehow lost its verified flag.
+      // Safe to flip — OAuth itself proves email ownership.
       user = await this.prisma.user.update({
-        where: { id: user.id },
+        where: { id: existing.id },
         data: { emailVerified: new Date() },
       });
     }
 
-    if (profile.provider && profile.providerId) {
-      // Recording the linked OAuth account is supplementary — it powers the
-      // /profile "Connected accounts" UI but isn't required to issue tokens.
-      // Swallow failures so an out-of-date schema (missing OAuthAccount table)
-      // can't block users from logging in. The error is logged for the admin.
+    let newlyLinkedProvider: 'google' | 'github' | null = null;
+    if (user && profile.provider && profile.providerId) {
+      // Track whether THIS provider has been linked before — only the FIRST
+      // link should fire the "we connected a new account" notification.
+      // Use findUnique + branch (instead of upsert) so we can detect insert
+      // vs. update without a Prisma return-value heuristic.
+      const existingLink = await this.prisma.oAuthAccount.findUnique({
+        where: {
+          userId_provider: { userId: user.id, provider: profile.provider },
+        },
+        select: { id: true },
+      });
+
       try {
-        await this.prisma.oAuthAccount.upsert({
-          where: {
-            userId_provider: { userId: user.id, provider: profile.provider },
-          },
-          update: {
-            providerId: profile.providerId,
-            email,
-            lastUsedAt: new Date(),
-          },
-          create: {
-            userId: user.id,
-            provider: profile.provider,
-            providerId: profile.providerId,
-            email,
-          },
-        });
+        if (existingLink) {
+          await this.prisma.oAuthAccount.update({
+            where: { id: existingLink.id },
+            data: {
+              providerId: profile.providerId,
+              email,
+              lastUsedAt: new Date(),
+            },
+          });
+        } else {
+          await this.prisma.oAuthAccount.create({
+            data: {
+              userId: user.id,
+              provider: profile.provider,
+              providerId: profile.providerId,
+              email,
+            },
+          });
+          newlyLinkedProvider = profile.provider;
+        }
       } catch (err) {
+        // OAuthAccount tracking is supplementary — never block login on it.
+        // Worst case: the "Connected accounts" UI is missing a row until
+        // the next OAuth sign-in.
         const msg = err instanceof Error ? err.message : String(err);
         this.logger.warn(
           `Failed to record OAuthAccount for ${user.id} (${profile.provider}): ${msg}. Continuing login. Run "prisma migrate deploy" to fix.`,
         );
       }
+    }
+
+    if (!user) {
+      // Should be unreachable — every branch above either assigned `user`
+      // or threw. Keep a defensive throw so TS narrows the type.
+      throw new UnauthorizedException(MSG.ERROR.INVALID_CREDENTIALS);
     }
 
     const tokens = await this.generateTokens(user.id, user.email, meta);
@@ -256,6 +309,8 @@ export class AuthService {
         image: user.image,
         role: user.role,
       },
+      wasNewUser,
+      newlyLinkedProvider,
     };
   }
 

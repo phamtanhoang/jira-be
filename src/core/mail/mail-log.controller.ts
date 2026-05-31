@@ -106,8 +106,13 @@ export class MailLogController {
       await this.mail.sendVerificationEmail(dto.to, sampleOtp);
     } else if (dto.template === 'resetPassword') {
       await this.mail.sendResetPasswordEmail(dto.to, sampleOtp);
-    } else {
+    } else if (dto.template === 'welcome') {
       await this.mail.sendWelcomeEmail(dto.to);
+    } else {
+      // oauthLinked — preview with Google so the admin sees an example
+      // body. The "provider" param is meaningless at template-edit time;
+      // BE picks the real value at send-time from the OAuth profile.
+      await this.mail.sendOAuthLinkedEmail(dto.to, 'google');
     }
     return { message: MSG.SUCCESS.MAIL_TEST_SENT };
   }

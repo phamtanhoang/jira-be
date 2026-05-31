@@ -35,6 +35,7 @@ import {
   refreshTokenCookieOptions,
 } from '@/core/constants';
 import { CurrentUser, Public } from '@/core/decorators';
+import { MailService } from '@/core/mail/mail.service';
 import { AuthUser } from '@/core/types';
 import {
   EventLoggerService,
@@ -66,6 +67,7 @@ export class AuthController {
     private authService: AuthService,
     private settings: SettingsService,
     private events: EventLoggerService,
+    private mail: MailService,
   ) {}
 
   @Public()
@@ -273,8 +275,16 @@ export class AuthController {
   async unlinkOAuthAccount(
     @CurrentUser() user: AuthUser,
     @Param('provider') provider: string,
+    @Req() req: Request,
   ) {
-    return this.authService.unlinkOAuthAccount(user.id, provider);
+    const result = await this.authService.unlinkOAuthAccount(user.id, provider);
+    this.events.log(EVENTS.AUTH_OAUTH_UNLINKED, {
+      userId: user.id,
+      userEmail: user.email,
+      ip: req.ip ?? null,
+      metadata: { provider },
+    });
+    return result;
   }
 
   @Public()
@@ -345,6 +355,52 @@ export class AuthController {
           fePublicCookieOptions(),
         );
       }
+
+      // Side effects — all fire-and-forget so a downed mail provider or
+      // log buffer flush can never block the redirect chain.
+      this.events.log(EVENTS.AUTH_LOGIN_SUCCESS, {
+        userId: tokens.user.id,
+        userEmail: tokens.user.email,
+        ip: req.ip ?? null,
+        userAgent: req.headers['user-agent'] ?? null,
+        metadata: { method: 'oauth', provider: profile.provider },
+      });
+
+      if (tokens.newlyLinkedProvider) {
+        // First time this user authenticates with this provider — emit a
+        // security-audit event AND notify the rightful owner so a stolen
+        // OAuth session can be spotted.
+        this.events.log(EVENTS.AUTH_OAUTH_LINKED, {
+          userId: tokens.user.id,
+          userEmail: tokens.user.email,
+          ip: req.ip ?? null,
+          metadata: {
+            provider: tokens.newlyLinkedProvider,
+            wasNewUser: tokens.wasNewUser,
+          },
+        });
+        void this.mail
+          .sendOAuthLinkedEmail(tokens.user.email, tokens.newlyLinkedProvider)
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.logger.warn(
+              `oauth-linked email failed for ${tokens.user.email}: ${msg}`,
+            );
+          });
+      }
+
+      if (tokens.wasNewUser) {
+        // OAuth-created accounts skip the verify-email flow, so the welcome
+        // email never fires from `verifyEmail`. Send it here on first sign-in
+        // instead — mirrors what big SaaS apps (Linear, Vercel, Notion) do.
+        void this.mail.sendWelcomeEmail(tokens.user.email).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.warn(
+            `welcome email (oauth signup) failed for ${tokens.user.email}: ${msg}`,
+          );
+        });
+      }
+
       return res.redirect(`${frontend}/dashboard`);
     } catch (err) {
       // Log the full reason server-side so admins can debug OAuth flow

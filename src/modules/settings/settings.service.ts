@@ -146,7 +146,11 @@ export class SettingsService {
    * body. Empty strings (or missing fields) fall back to built-in defaults
    * inside MailService. Persisted shape:
    *   `{ verification: { subject, html }, resetPassword: { subject, html },
-   *      welcome: { subject, html } }`
+   *      welcome: { subject, html }, oauthLinked: { subject, html } }`
+   *
+   * Adding a new key here means existing DB rows (saved before the key
+   * existed) will just return an empty template for it — `MailService`
+   * then falls back to the hardcoded default until the admin edits it.
    */
   async getEmailTemplates(): Promise<EmailTemplatesSetting> {
     const setting = await this.prisma.setting.findUnique({
@@ -157,6 +161,7 @@ export class SettingsService {
       verification: normTemplate(value.verification),
       resetPassword: normTemplate(value.resetPassword),
       welcome: normTemplate(value.welcome),
+      oauthLinked: normTemplate(value.oauthLinked),
     };
   }
 
@@ -295,6 +300,7 @@ export interface EmailTemplatesSetting {
   verification: EmailTemplate;
   resetPassword: EmailTemplate;
   welcome: EmailTemplate;
+  oauthLinked: EmailTemplate;
 }
 
 function normTemplate(

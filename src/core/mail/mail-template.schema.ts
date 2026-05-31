@@ -22,6 +22,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   'verification',
   'resetPassword',
   'welcome',
+  'oauthLinked',
 ] as const;
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
 
@@ -31,6 +32,10 @@ export const EMAIL_TEMPLATE_PLACEHOLDERS = [
   'otp',
   'expiryMinutes',
   'recipientEmail',
+  // Provider-aware emails (currently only `oauthLinked`). Other templates
+  // simply leave this empty — `renderTemplate` substitutes blank instead
+  // of leaving `{{providerLabel}}` literally in the rendered body.
+  'providerLabel',
 ] as const;
 export type EmailTemplatePlaceholder =
   (typeof EMAIL_TEMPLATE_PLACEHOLDERS)[number];

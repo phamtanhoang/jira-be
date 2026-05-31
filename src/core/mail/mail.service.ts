@@ -281,6 +281,8 @@ export class MailService {
         otp: '123456',
         expiryMinutes: String(expiryMinutes),
         recipientEmail: 'you@example.com',
+        // OAuth-aware preview only — other templates render this as blank.
+        providerLabel: 'Google',
       },
     };
   }
@@ -327,6 +329,7 @@ export class MailService {
       otp,
       expiryMinutes,
       recipientEmail: email,
+      providerLabel: '',
     };
     await this.send({
       to: email,
@@ -357,6 +360,7 @@ export class MailService {
       otp,
       expiryMinutes,
       recipientEmail: email,
+      providerLabel: '',
     };
     await this.send({
       to: email,
@@ -378,6 +382,44 @@ export class MailService {
   }
 
   /**
+   * Fires when a new OAuth provider is linked to a user's account — first
+   * sign-in via Google or GitHub, or when an admin endpoint adds a fresh
+   * link. Mirrors the pattern Google / GitHub / Slack use to surface "a
+   * new sign-in method was attached" so the rightful owner can react if
+   * they didn't do it themselves.
+   */
+  async sendOAuthLinkedEmail(
+    email: string,
+    provider: 'google' | 'github',
+  ): Promise<void> {
+    const appInfo = await this.getAppInfo();
+    const override = await this.getTemplateOverride('oauthLinked');
+    const providerLabel = provider === 'google' ? 'Google' : 'GitHub';
+    const vars = {
+      appName: appInfo.name ?? '',
+      logoUrl: appInfo.logoUrl ?? '',
+      otp: '',
+      expiryMinutes: '',
+      recipientEmail: email,
+      providerLabel,
+    };
+    await this.send({
+      to: email,
+      subject: override.subject
+        ? this.renderTemplate(override.subject, vars)
+        : `${providerLabel} sign-in linked to your ${vars.appName || 'account'}`,
+      html: override.html
+        ? this.renderTemplate(override.html, vars)
+        : oauthLinkedFallbackHtml({
+            appName: vars.appName || 'Jira Clone',
+            providerLabel,
+            recipientEmail: email,
+          }),
+      type: MailType.OTHER,
+    });
+  }
+
+  /**
    * Fires once per user, right after they successfully verify their email.
    * No OTP or expiry — `otp` / `expiryMinutes` are passed empty so any
    * `{{otp}}` left in an admin-edited template renders as blank rather than
@@ -395,6 +437,7 @@ export class MailService {
       otp: '',
       expiryMinutes: '',
       recipientEmail: email,
+      providerLabel: '',
     };
     await this.send({
       to: email,
@@ -407,6 +450,18 @@ export class MailService {
       type: MailType.OTHER,
     });
   }
+}
+
+function oauthLinkedFallbackHtml(vars: {
+  appName: string;
+  providerLabel: string;
+  recipientEmail: string;
+}): string {
+  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;max-width:480px;margin:24px auto;padding:0 16px;color:#172b4d">
+    <h2 style="margin:0 0 12px">${vars.providerLabel} sign-in linked</h2>
+    <p>Hi, we connected <strong>${vars.providerLabel}</strong> as a sign-in method for your ${vars.appName} account <strong>${vars.recipientEmail}</strong>.</p>
+    <p style="color:#5e6c84;font-size:14px;margin-top:16px">Didn't do this? Sign in and disconnect ${vars.providerLabel} from your profile's <em>Connected accounts</em> section, and consider rotating your password.</p>
+  </body></html>`;
 }
 
 function welcomeFallbackHtml(vars: {
