@@ -63,3 +63,27 @@ export const clearCookieOptions = (path: string = '/') => ({
   path,
   ...(cookieDomain && { domain: cookieDomain }),
 });
+
+/**
+ * Logout-safe wipe: clears the cookie under BOTH scopes — current
+ * domain-attributed (if `COOKIE_DOMAIN` is set) AND legacy host-only
+ * (from before we adopted cross-subdomain cookies). Without this, stale
+ * host-only cookies from a previous deploy would outlive `/auth/logout`
+ * and keep `/auth/me` succeeding until the user manually cleared them.
+ *
+ * Express `res.clearCookie` is just a `Set-Cookie: ...; Max-Age=0` write,
+ * so calling it twice with different attributes is safe — each emits a
+ * separate header and the browser tombstones each match independently.
+ */
+export function clearAuthCookie(
+  res: import('express').Response,
+  name: string,
+  path: string = '/',
+): void {
+  if (cookieDomain) {
+    // Tombstone the domain-scoped cookie.
+    res.clearCookie(name, { path, domain: cookieDomain });
+  }
+  // Always also tombstone the host-only version — covers legacy state.
+  res.clearCookie(name, { path });
+}

@@ -30,7 +30,7 @@ import {
   MSG,
   UPLOAD_LIMITS,
   accessTokenCookieOptions,
-  clearCookieOptions,
+  clearAuthCookie,
   fePublicCookieOptions,
   refreshTokenCookieOptions,
 } from '@/core/constants';
@@ -204,8 +204,15 @@ export class AuthController {
       await this.authService.logout(refreshToken);
     }
 
-    res.clearCookie(COOKIE_KEYS.ACCESS_TOKEN, clearCookieOptions());
-    res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, clearCookieOptions('/'));
+    clearAuthCookie(res, COOKIE_KEYS.ACCESS_TOKEN);
+    clearAuthCookie(res, COOKIE_KEYS.REFRESH_TOKEN);
+    // Defensive: wipe the FE-readable flags server-side too. The FE
+    // `useLogout` hook also clears them via `document.cookie`, but if the
+    // page navigates away mid-mutation that JS never runs — without this,
+    // `is_authenticated=1` would survive logout and let the next protected
+    // navigation skip the sign-in redirect.
+    clearAuthCookie(res, COOKIE_KEYS.IS_AUTHENTICATED);
+    clearAuthCookie(res, COOKIE_KEYS.USER_ROLE);
 
     this.events.log(EVENTS.AUTH_LOGOUT, {
       userId: user?.id ?? null,
@@ -504,8 +511,8 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const count = await this.authService.revokeAllMySessions(user.id);
-    res.clearCookie(COOKIE_KEYS.ACCESS_TOKEN, clearCookieOptions());
-    res.clearCookie(COOKIE_KEYS.REFRESH_TOKEN, clearCookieOptions('/'));
+    clearAuthCookie(res, COOKIE_KEYS.ACCESS_TOKEN);
+    clearAuthCookie(res, COOKIE_KEYS.REFRESH_TOKEN);
     return { message: MSG.SUCCESS.SESSIONS_REVOKED, count };
   }
 
