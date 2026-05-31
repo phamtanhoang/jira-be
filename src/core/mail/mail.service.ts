@@ -15,6 +15,7 @@ import {
   EMAIL_TEMPLATE_KEYS,
   EMAIL_TEMPLATE_PLACEHOLDERS,
   type EmailTemplateKey,
+  type EmailTemplatePlaceholder,
   type EmailTemplateSchema,
 } from './mail-template.schema';
 import { otpEmailTemplate } from './templates/otp-email.template';
