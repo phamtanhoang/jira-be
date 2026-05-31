@@ -677,17 +677,16 @@ export class AdminService {
 
     // Fan out the actual mail sends — fire-and-forget so a single SMTP
     // failure doesn't cascade. Each call already persists a MailLog row, so
-    // operators can audit failures from /admin/mail-logs.
+    // operators can audit failures from /admin/mail-logs. The email body
+    // is admin-editable via the `invitation` setting template.
     const signUpBase = ENV.FRONTEND_URL || ENV.CORS_ORIGIN.split(',')[0] || '';
     for (const email of fresh) {
       const link = `${signUpBase}/sign-up?email=${encodeURIComponent(email)}`;
-      const html = renderInvitationHtml(link, message);
       void this.mail
-        .send({
+        .sendInvitationEmail({
           to: email,
-          subject: 'You have been invited',
-          html,
-          type: 'OTHER',
+          signUpUrl: link,
+          customMessage: message,
         })
         .catch((err) =>
           this.logger.warn(
@@ -705,27 +704,3 @@ export class AdminService {
   }
 }
 
-function renderInvitationHtml(
-  signUpUrl: string,
-  customMessage?: string,
-): string {
-  const safeMessage = customMessage
-    ? `<p>${escapeHtml(customMessage)}</p>`
-    : '';
-  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;max-width:560px;margin:auto;padding:24px;color:#1f2937">
-    <h2 style="margin:0 0 16px">You have been invited</h2>
-    <p>An administrator has invited you to join. Click the link below to create your account:</p>
-    ${safeMessage}
-    <p style="margin:24px 0"><a href="${signUpUrl}" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block">Sign up</a></p>
-    <p style="color:#6b7280;font-size:12px">If the button doesn't work, paste this link in your browser:<br/>${signUpUrl}</p>
-  </body></html>`;
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}

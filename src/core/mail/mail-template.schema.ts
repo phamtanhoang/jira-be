@@ -19,23 +19,38 @@
  */
 
 export const EMAIL_TEMPLATE_KEYS = [
+  'welcome',
   'verification',
   'resetPassword',
-  'welcome',
   'oauthLinked',
+  'digest',
+  'invitation',
 ] as const;
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
 
 export const EMAIL_TEMPLATE_PLACEHOLDERS = [
+  // Branding — always populated from `app.info`.
   'appName',
   'logoUrl',
+  // Recipient identity — `recipientEmail` is always set; `recipientName`
+  // falls back to email when the user has no display name yet.
+  'recipientEmail',
+  'recipientName',
+  // OTP-aware emails (verification, resetPassword). Others render blank.
   'otp',
   'expiryMinutes',
-  'recipientEmail',
-  // Provider-aware emails (currently only `oauthLinked`). Other templates
-  // simply leave this empty — `renderTemplate` substitutes blank instead
-  // of leaving `{{providerLabel}}` literally in the rendered body.
+  // Provider-aware (oauthLinked only).
   'providerLabel',
+  // Digest-aware. `notificationsHtml` is pre-rendered list items (li/ul
+  // emitted by the service) — admin template can wrap it in any chrome.
+  'notificationsHtml',
+  'notificationCount',
+  'dashboardUrl',
+  // Invitation-aware. `customMessage` is the admin's optional intro line
+  // (HTML-escaped server-side before substitution).
+  'signUpUrl',
+  'customMessage',
+  'inviterName',
 ] as const;
 export type EmailTemplatePlaceholder =
   (typeof EMAIL_TEMPLATE_PLACEHOLDERS)[number];

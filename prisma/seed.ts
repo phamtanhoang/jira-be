@@ -303,6 +303,112 @@ const OAUTH_LINKED_EMAIL_HTML = `<!DOCTYPE html>
 </html>
 `;
 
+const DIGEST_EMAIL_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your daily digest</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#172b4d;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background-color:#ffffff;border-radius:12px;box-shadow:0 2px 12px rgba(9,30,66,0.08);overflow:hidden;">
+          <tr>
+            <td style="background:#ffffff;padding:28px 40px;text-align:center;border-bottom:1px solid #ebecf0;">
+              <img src="{{logoUrl}}" alt="{{appName}}" width="36" height="36" style="display:inline-block;vertical-align:middle;margin-right:10px;border:0;border-radius:8px;" />
+              <span style="color:#172b4d;font-size:22px;font-weight:700;vertical-align:middle;letter-spacing:-0.3px;">{{appName}}</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:36px 40px 8px;">
+              <h1 style="margin:0 0 12px;font-size:22px;font-weight:600;color:#172b4d;">Hi {{recipientName}},</h1>
+              <p style="margin:0;font-size:14px;line-height:1.6;color:#5e6c84;">
+                You have <strong style="color:#172b4d;">{{notificationCount}}</strong> unread notifications waiting in {{appName}}.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 40px 16px;">
+              <ul style="list-style:none;padding:0;margin:8px 0">{{notificationsHtml}}</ul>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:16px 40px 32px;">
+              <a href="{{dashboardUrl}}" style="display:inline-block;padding:12px 28px;background:#0052cc;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+                Open dashboard →
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 40px;background:linear-gradient(135deg,#0052cc 0%,#2684ff 100%);text-align:center;">
+              <p style="margin:0;font-size:12px;color:#ffffff;opacity:0.9;">
+                © {{appName}} — adjust email preferences from your profile settings.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
+const INVITATION_EMAIL_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>You have been invited to {{appName}}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#172b4d;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background-color:#ffffff;border-radius:12px;box-shadow:0 2px 12px rgba(9,30,66,0.08);overflow:hidden;">
+          <tr>
+            <td style="background:#ffffff;padding:32px 40px;text-align:center;border-bottom:1px solid #ebecf0;">
+              <img src="{{logoUrl}}" alt="{{appName}}" width="40" height="40" style="display:inline-block;vertical-align:middle;margin-right:12px;border:0;border-radius:8px;" />
+              <span style="color:#172b4d;font-size:24px;font-weight:700;vertical-align:middle;letter-spacing:-0.3px;">{{appName}}</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 40px 16px;">
+              <h1 style="margin:0 0 12px;font-size:24px;font-weight:600;color:#172b4d;">You have been invited 🎉</h1>
+              <p style="margin:0 0 16px;font-size:14px;line-height:1.6;color:#5e6c84;">
+                You have been invited to collaborate on <strong style="color:#172b4d;">{{appName}}</strong>. Create your account to get started.
+              </p>
+              <p style="margin:0;font-size:14px;line-height:1.6;color:#5e6c84;">{{customMessage}}</p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:24px 40px 32px;">
+              <a href="{{signUpUrl}}" style="display:inline-block;padding:12px 32px;background:#0052cc;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">
+                Accept invitation
+              </a>
+              <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:#7a869a;">
+                Or copy and paste this link into your browser:<br/>
+                <a href="{{signUpUrl}}" style="color:#0052cc;word-break:break-all;">{{signUpUrl}}</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 40px;background:linear-gradient(135deg,#00875a 0%,#36b37e 100%);text-align:center;">
+              <p style="margin:0;font-size:12px;color:#ffffff;opacity:0.9;">
+                © {{appName}} — if you weren't expecting this invite, you can ignore it.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
 /**
  * Defaults dictionary. Shape of each value mirrors the corresponding
  * `*Value` type in `jira-fe/src/features/admin/types.ts` and the BE
@@ -394,6 +500,15 @@ const SEED: Record<string, Prisma.InputJsonValue> = {
     oauthLinked: {
       subject: '{{providerLabel}} sign-in linked to your {{appName}} account',
       html: OAUTH_LINKED_EMAIL_HTML,
+    },
+    digest: {
+      subject:
+        'You have {{notificationCount}} unread notifications in {{appName}}',
+      html: DIGEST_EMAIL_HTML,
+    },
+    invitation: {
+      subject: 'You have been invited to {{appName}}',
+      html: INVITATION_EMAIL_HTML,
     },
   },
 };

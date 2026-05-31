@@ -99,8 +99,11 @@ export class MailLogController {
       'Send the saved verification/reset template to the given address (Admin)',
   })
   async sendTemplateTest(@Body() dto: MailTemplateTestDto) {
-    // Use a fixed sample OTP so the recipient sees the template's placeholder
-    // substitution working end-to-end against the saved settings.
+    // Render each template against fake-but-realistic sample data so the
+    // admin sees what real recipients will see — no real OTPs, no real
+    // notifications. The "provider"/"customMessage" args are
+    // meaningless at template-edit time; BE picks the real values at
+    // send-time from the actual flow.
     const sampleOtp = '123456';
     if (dto.template === 'verification') {
       await this.mail.sendVerificationEmail(dto.to, sampleOtp);
@@ -108,11 +111,27 @@ export class MailLogController {
       await this.mail.sendResetPasswordEmail(dto.to, sampleOtp);
     } else if (dto.template === 'welcome') {
       await this.mail.sendWelcomeEmail(dto.to);
-    } else {
-      // oauthLinked — preview with Google so the admin sees an example
-      // body. The "provider" param is meaningless at template-edit time;
-      // BE picks the real value at send-time from the OAuth profile.
+    } else if (dto.template === 'oauthLinked') {
       await this.mail.sendOAuthLinkedEmail(dto.to, 'google');
+    } else if (dto.template === 'digest') {
+      const sampleItems = [
+        `<li style="padding:10px 0;border-bottom:1px solid #e5e7eb"><div style="font-weight:500">Sample notification A</div><div style="color:#6b7280;font-size:13px;margin-top:2px">A short description goes here.</div></li>`,
+        `<li style="padding:10px 0;border-bottom:1px solid #e5e7eb"><div style="font-weight:500">Sample notification B</div></li>`,
+      ].join('');
+      await this.mail.sendDigestEmail({
+        to: dto.to,
+        recipientName: 'Test user',
+        notificationsHtml: sampleItems,
+        notificationCount: 2,
+      });
+    } else {
+      // invitation
+      await this.mail.sendInvitationEmail({
+        to: dto.to,
+        signUpUrl: 'https://example.com/sign-up?email=test',
+        customMessage: 'Welcome aboard! This is a sample invite message.',
+        inviterName: 'Admin',
+      });
     }
     return { message: MSG.SUCCESS.MAIL_TEST_SENT };
   }

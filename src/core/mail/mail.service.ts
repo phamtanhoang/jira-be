@@ -270,19 +270,31 @@ export class MailService {
   async getTemplateSchema(): Promise<EmailTemplateSchema> {
     const appInfo = await this.getAppInfo();
     const expiryMinutes = Math.round(ENV.TOKEN_VERIFY_EXPIRY / 60);
+    const dashboardUrl = resolveDashboardUrl();
+    const sampleSignUpUrl = `${resolveFrontendBase()}/sign-up?email=alice%40example.com`;
+    const sampleItem = `<li style="padding:10px 0;border-bottom:1px solid #e5e7eb"><div style="font-weight:500">Sample notification</div></li>`;
     return {
       templates: EMAIL_TEMPLATE_KEYS,
       placeholders: EMAIL_TEMPLATE_PLACEHOLDERS,
+      // Each value is a placeholder-aware sample: the FE preview iframe
+      // shows what the recipient WILL see for each variable, instead of
+      // raw `{{placeholder}}` strings. Per-send values (OTP, recipient,
+      // notifications) get clearly-fake samples so admins can't mistake
+      // the preview for leaked production data.
       previewSample: {
         appName: appInfo.name ?? '',
         logoUrl: appInfo.logoUrl ?? '',
-        // OTP + recipient are per-send values; surface a clearly-fake sample
-        // so the admin doesn't mistake the preview for a leaked real code.
         otp: '123456',
         expiryMinutes: String(expiryMinutes),
-        recipientEmail: 'you@example.com',
-        // OAuth-aware preview only — other templates render this as blank.
+        recipientEmail: 'alice@example.com',
+        recipientName: 'Alice',
         providerLabel: 'Google',
+        notificationsHtml: sampleItem,
+        notificationCount: '1',
+        dashboardUrl,
+        signUpUrl: sampleSignUpUrl,
+        customMessage: 'Welcome to the team!',
+        inviterName: 'Admin',
       },
     };
   }
@@ -324,12 +336,13 @@ export class MailService {
     const override = await this.getTemplateOverride('verification');
     const expiryMinutes = Math.round(ENV.TOKEN_VERIFY_EXPIRY / 60);
     const vars = {
+      ...emptyPlaceholders(),
       appName: appInfo.name ?? '',
       logoUrl: appInfo.logoUrl ?? '',
       otp,
       expiryMinutes,
       recipientEmail: email,
-      providerLabel: '',
+      recipientName: '',
     };
     await this.send({
       to: email,
@@ -355,12 +368,12 @@ export class MailService {
     const override = await this.getTemplateOverride('resetPassword');
     const expiryMinutes = Math.round(ENV.TOKEN_VERIFY_EXPIRY / 60);
     const vars = {
+      ...emptyPlaceholders(),
       appName: appInfo.name ?? '',
       logoUrl: appInfo.logoUrl ?? '',
       otp,
       expiryMinutes,
       recipientEmail: email,
-      providerLabel: '',
     };
     await this.send({
       to: email,
@@ -396,10 +409,9 @@ export class MailService {
     const override = await this.getTemplateOverride('oauthLinked');
     const providerLabel = provider === 'google' ? 'Google' : 'GitHub';
     const vars = {
+      ...emptyPlaceholders(),
       appName: appInfo.name ?? '',
       logoUrl: appInfo.logoUrl ?? '',
-      otp: '',
-      expiryMinutes: '',
       recipientEmail: email,
       providerLabel,
     };
@@ -432,12 +444,11 @@ export class MailService {
     const appInfo = await this.getAppInfo();
     const override = await this.getTemplateOverride('welcome');
     const vars = {
+      ...emptyPlaceholders(),
       appName: appInfo.name ?? '',
       logoUrl: appInfo.logoUrl ?? '',
-      otp: '',
-      expiryMinutes: '',
       recipientEmail: email,
-      providerLabel: '',
+      dashboardUrl: resolveDashboardUrl(),
     };
     await this.send({
       to: email,
@@ -450,6 +461,113 @@ export class MailService {
       type: MailType.OTHER,
     });
   }
+
+  /**
+   * Daily digest of unread notifications. Caller pre-renders the inner
+   * list (one `<li>` per row) and passes it as `notificationsHtml` —
+   * admin template wraps it in whatever chrome they want. We do NOT
+   * delegate row rendering to the admin template: list shape depends on
+   * runtime data, so it's safer to keep the layout in code and let the
+   * admin own only the surrounding HTML.
+   */
+  async sendDigestEmail(args: {
+    to: string;
+    recipientName: string | null;
+    notificationsHtml: string;
+    notificationCount: number;
+  }): Promise<void> {
+    const appInfo = await this.getAppInfo();
+    const override = await this.getTemplateOverride('digest');
+    const vars = {
+      ...emptyPlaceholders(),
+      appName: appInfo.name ?? '',
+      logoUrl: appInfo.logoUrl ?? '',
+      recipientEmail: args.to,
+      recipientName: args.recipientName || args.to,
+      notificationsHtml: args.notificationsHtml,
+      notificationCount: String(args.notificationCount),
+      dashboardUrl: resolveDashboardUrl(),
+    };
+    const fallbackSubject = `You have ${args.notificationCount} unread notification${args.notificationCount === 1 ? '' : 's'}`;
+    await this.send({
+      to: args.to,
+      subject: override.subject
+        ? this.renderTemplate(override.subject, vars)
+        : fallbackSubject,
+      html: override.html
+        ? this.renderTemplate(override.html, vars)
+        : digestFallbackHtml(vars),
+      type: MailType.OTHER,
+    });
+  }
+
+  /**
+   * User invitation. Admin's free-form `customMessage` is HTML-escaped
+   * before substitution so a typo in the message can't break template
+   * rendering. The template owns the surrounding chrome + CTA button.
+   */
+  async sendInvitationEmail(args: {
+    to: string;
+    signUpUrl: string;
+    customMessage?: string;
+    inviterName?: string | null;
+  }): Promise<void> {
+    const appInfo = await this.getAppInfo();
+    const override = await this.getTemplateOverride('invitation');
+    const vars = {
+      ...emptyPlaceholders(),
+      appName: appInfo.name ?? '',
+      logoUrl: appInfo.logoUrl ?? '',
+      recipientEmail: args.to,
+      signUpUrl: args.signUpUrl,
+      customMessage: args.customMessage ? escapeHtml(args.customMessage) : '',
+      inviterName: args.inviterName ?? '',
+    };
+    await this.send({
+      to: args.to,
+      subject: override.subject
+        ? this.renderTemplate(override.subject, vars)
+        : `You have been invited to ${vars.appName || 'Jira Clone'}`,
+      html: override.html
+        ? this.renderTemplate(override.html, vars)
+        : invitationFallbackHtml(vars),
+      type: MailType.OTHER,
+    });
+  }
+}
+
+/**
+ * Every placeholder defaults to empty string so admin templates that
+ * reference variables not relevant to their template (e.g. `{{otp}}` in
+ * the invitation template) render blank instead of leaking `{{otp}}`
+ * literal. Per-template overrides pick what they actually populate.
+ */
+function emptyPlaceholders(): Record<EmailTemplatePlaceholder, string> {
+  return EMAIL_TEMPLATE_PLACEHOLDERS.reduce(
+    (acc, key) => {
+      acc[key] = '';
+      return acc;
+    },
+    {} as Record<EmailTemplatePlaceholder, string>,
+  );
+}
+
+function resolveFrontendBase(): string {
+  return ENV.FRONTEND_URL || ENV.CORS_ORIGIN.split(',')[0]?.trim() || '';
+}
+
+function resolveDashboardUrl(): string {
+  const base = resolveFrontendBase();
+  return base ? `${base}/dashboard` : '/dashboard';
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function oauthLinkedFallbackHtml(vars: {
@@ -473,5 +591,39 @@ function welcomeFallbackHtml(vars: {
     <h2>Welcome to ${name}!</h2>
     <p>Hi, your account <strong>${vars.recipientEmail}</strong> is now verified and ready to use.</p>
     <p>Sign in to get started.</p>
+  </body></html>`;
+}
+
+function digestFallbackHtml(vars: {
+  appName: string;
+  recipientName: string;
+  notificationsHtml: string;
+  dashboardUrl: string;
+}): string {
+  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;max-width:560px;margin:24px auto;padding:0 16px;color:#1f2937">
+    <h2 style="margin:0 0 16px">Hi ${escapeHtml(vars.recipientName)},</h2>
+    <p>Here is your daily summary of unread notifications from ${escapeHtml(vars.appName || 'Jira Clone')}:</p>
+    <ul style="list-style:none;padding:0;margin:16px 0">${vars.notificationsHtml}</ul>
+    <p style="margin:24px 0"><a href="${vars.dashboardUrl}" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block">Open dashboard</a></p>
+    <p style="color:#6b7280;font-size:12px;margin-top:24px">Adjust your email preferences in profile settings.</p>
+  </body></html>`;
+}
+
+function invitationFallbackHtml(vars: {
+  appName: string;
+  signUpUrl: string;
+  customMessage: string;
+  inviterName: string;
+}): string {
+  const inviter = vars.inviterName
+    ? `<strong>${escapeHtml(vars.inviterName)}</strong> has`
+    : 'An administrator has';
+  const customLine = vars.customMessage ? `<p>${vars.customMessage}</p>` : '';
+  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;max-width:560px;margin:24px auto;padding:0 16px;color:#1f2937">
+    <h2 style="margin:0 0 16px">You have been invited</h2>
+    <p>${inviter} invited you to join ${escapeHtml(vars.appName || 'Jira Clone')}. Click the link below to create your account:</p>
+    ${customLine}
+    <p style="margin:24px 0"><a href="${vars.signUpUrl}" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block">Sign up</a></p>
+    <p style="color:#6b7280;font-size:12px">If the button doesn't work, paste this link in your browser:<br/>${vars.signUpUrl}</p>
   </body></html>`;
 }

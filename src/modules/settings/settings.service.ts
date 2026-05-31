@@ -162,6 +162,8 @@ export class SettingsService {
       resetPassword: normTemplate(value.resetPassword),
       welcome: normTemplate(value.welcome),
       oauthLinked: normTemplate(value.oauthLinked),
+      digest: normTemplate(value.digest),
+      invitation: normTemplate(value.invitation),
     };
   }
 
@@ -301,6 +303,8 @@ export interface EmailTemplatesSetting {
   resetPassword: EmailTemplate;
   welcome: EmailTemplate;
   oauthLinked: EmailTemplate;
+  digest: EmailTemplate;
+  invitation: EmailTemplate;
 }
 
 function normTemplate(

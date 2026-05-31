@@ -113,12 +113,12 @@ export class DigestService {
       return { sent: false, count: 0 };
     }
 
-    const html = renderDigestHtml(user.name ?? user.email, eligible);
-    await this.mail.send({
+    const notificationsHtml = renderDigestItems(eligible);
+    await this.mail.sendDigestEmail({
       to: user.email,
-      subject: `You have ${eligible.length} unread notification${eligible.length === 1 ? '' : 's'}`,
-      html,
-      type: 'OTHER',
+      recipientName: user.name,
+      notificationsHtml,
+      notificationCount: eligible.length,
     });
 
     await this.prisma.notification.updateMany({
@@ -130,8 +130,14 @@ export class DigestService {
   }
 }
 
-function renderDigestHtml(
-  name: string,
+/**
+ * Render ONLY the inner `<li>` items — surrounding chrome (header, intro,
+ * CTA, footer) is owned by the admin-editable `digest` email template
+ * and substituted in via `{{notificationsHtml}}`. Keeping the list shape
+ * in code lets the layout stay consistent across templates while admins
+ * still control branding.
+ */
+function renderDigestItems(
   rows: {
     title: string;
     body: string | null;
@@ -140,7 +146,7 @@ function renderDigestHtml(
   }[],
 ): string {
   const baseUrl = ENV.FRONTEND_URL || ENV.CORS_ORIGIN.split(',')[0] || '';
-  const items = rows
+  return rows
     .map((n) => {
       const linkAttr = n.link ? `href="${baseUrl}${n.link}"` : '';
       const titleHtml = n.link
@@ -155,15 +161,6 @@ function renderDigestHtml(
       </li>`;
     })
     .join('');
-
-  return `<!doctype html><html><body style="font-family:system-ui,sans-serif;max-width:560px;margin:auto;padding:24px;color:#1f2937">
-    <h2 style="margin:0 0 16px">Hi ${escapeHtml(name)},</h2>
-    <p>Here is your daily summary of unread notifications:</p>
-    <ul style="list-style:none;padding:0;margin:16px 0">${items}</ul>
-    <p style="color:#6b7280;font-size:12px;margin-top:24px">
-      You can adjust your email preferences from your profile settings.
-    </p>
-  </body></html>`;
 }
 
 function escapeHtml(str: string): string {
