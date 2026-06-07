@@ -30,16 +30,8 @@ Remove-Item Env:DATABASE_URL
 ```
 
 ## Override admin credentials
+account: `admin@example.com / Admin@12345`
 
-Don't ship the default `admin@example.com / Admin@12345` to prod — change immediately or override at seed time:
-
-```powershell
-$env:SEED_ADMIN_EMAIL='you@example.com'
-$env:SEED_ADMIN_PASSWORD='<long-random>'
-$env:SEED_ADMIN_NAME='Your Name'
-npx prisma db seed
-Remove-Item Env:SEED_ADMIN_EMAIL,Env:SEED_ADMIN_PASSWORD,Env:SEED_ADMIN_NAME
-```
 
 ## What gets seeded
 

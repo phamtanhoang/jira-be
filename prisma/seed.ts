@@ -22,15 +22,6 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
 });
 
-/**
- * Admin bootstrap credentials. Override via env so production seeds don't
- * use the hardcoded fallback. Print a warning when falling back so nobody
- * accidentally ships the default password live.
- */
-const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@example.com';
-const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'Admin@12345';
-const ADMIN_NAME = process.env.SEED_ADMIN_NAME ?? 'Admin';
-
 const SETTING_KEYS = {
   APP_INFO: 'app.info',
   APP_EMAIL: 'app.email',
@@ -548,9 +539,9 @@ async function seedSettings() {
  * would silently reset credentials the admin had already rotated.
  */
 async function seedAdmin() {
-  const usingDefaultPassword =
-    !process.env.SEED_ADMIN_PASSWORD ||
-    process.env.SEED_ADMIN_PASSWORD === 'Admin@12345';
+  const ADMIN_EMAIL = 'admin@example.com';
+  const ADMIN_PASSWORD = 'Admin@12345';
+  const ADMIN_NAME = 'Admin';
 
   const existing = await prisma.user.findUnique({
     where: { email: ADMIN_EMAIL },
@@ -590,14 +581,6 @@ async function seedAdmin() {
   console.log(`\nAdmin user created:`);
   console.log(`  email:    ${ADMIN_EMAIL}`);
   console.log(`  password: ${ADMIN_PASSWORD}`);
-  if (usingDefaultPassword) {
-    console.log(
-      `  ⚠ Default password in use — change it immediately at /profile, or`,
-    );
-    console.log(
-      `    re-run with SEED_ADMIN_PASSWORD=<strong-pass> to set your own.`,
-    );
-  }
 }
 
 async function main() {
