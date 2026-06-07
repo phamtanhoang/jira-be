@@ -183,6 +183,50 @@ jobs:
       # often contain unbalanced `_` `*` `[` `(` that break Markdown parsing
       # mid-message ("can't find end of the entity" error from Telegram).
       # HTML only requires escaping `< > &`, which commit messages rarely have.
+      - name: Prepare Telegram message
+        id: prepare-telegram-message
+        run: |
+          python - <<'PY'
+          import html, os
+
+          icon = os.getenv('STAGE_ICON', '')
+          title = os.getenv('STAGE_TITLE', '')
+          repo = os.getenv('GITHUB_REPOSITORY', '')
+          branch = os.getenv('GITHUB_REF_NAME', '')
+          commit = os.getenv('GITHUB_SHA', '')
+          author = os.getenv('GITHUB_ACTOR', '')
+          message = os.getenv('GITHUB_EVENT_HEAD_COMMIT_MESSAGE', '')
+          server_url = os.getenv('GITHUB_SERVER_URL', '')
+          run_id = os.getenv('GITHUB_RUN_ID', '')
+          output_path = os.environ['GITHUB_OUTPUT']
+
+          escaped_message = html.escape(message, quote=False)
+          payload = f"""{icon} <b>{html.escape(title)}</b>
+
+          <b>Repo:</b> <code>{html.escape(repo)}</code>
+          <b>Branch:</b> <code>{html.escape(branch)}</code>
+          <b>Commit:</b> <code>{html.escape(commit)}</code>
+          <b>Author:</b> {html.escape(author)}
+          <b>Message:</b> <code>{escaped_message}</code>
+
+          <a href=\"{html.escape(server_url)}/{html.escape(repo)}/actions/runs/{html.escape(run_id)}\">View Action</a>"""
+
+          with open(output_path, 'a', encoding='utf-8') as f:
+              f.write('telegram_message<<EOF\n')
+              f.write(payload + '\n')
+              f.write('EOF\n')
+          PY
+        env:
+          STAGE_ICON: ${{ steps.status.outputs.icon }}
+          STAGE_TITLE: ${{ steps.status.outputs.title }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_EVENT_HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+
       - name: Send Telegram notification
         if: steps.status.outputs.stage != 'skipped'
         uses: appleboy/telegram-action@master
@@ -190,13 +234,4 @@ jobs:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           format: html
-          message: |
-            ${{ steps.status.outputs.icon }} <b>${{ steps.status.outputs.title }}</b>
-
-            <b>Repo:</b> <code>${{ github.repository }}</code>
-            <b>Branch:</b> <code>${{ github.ref_name }}</code>
-            <b>Commit:</b> <code>${{ github.sha }}</code>
-            <b>Author:</b> ${{ github.actor }}
-            <b>Message:</b> ${{ github.event.head_commit.message }}
-
-            <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">View Action</a>
+          message: ${{ steps.prepare-telegram-message.outputs.telegram_message }}
