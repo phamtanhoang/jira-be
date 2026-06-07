@@ -420,10 +420,10 @@ const SEED: Record<string, Prisma.InputJsonValue> = {
   // `logoUrl` empty → header falls back to the AppName + initials avatar.
   [SETTING_KEYS.APP_INFO]: {
     name: 'Jira Clone',
-    logoUrl: '',
+    logoUrl: 'https://rrqbntjogjnghsbdekqp.supabase.co/storage/v1/object/public/jira-storage/logo_omim66.svg',
     description: 'Project management for small teams.',
-    authorName: '3hteam',
-    authorUrl: 'https://jira.3hteam.io.vn',
+    authorName: 'phamtanhoang',
+    authorUrl: 'https://phamtanhoang.io.vn',
   },
 
   // Mail provider config. Default uses Resend's no-domain-needed sender so
