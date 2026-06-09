@@ -8,6 +8,7 @@ import {
 import { Prisma, WorkspaceRole } from '@prisma/client';
 import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { LoggingConfigService } from '@/modules/logging-config/logging-config.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
 import { CreateWebhookDto, UpdateWebhookDto, WEBHOOK_EVENTS } from './dto';
@@ -18,6 +19,26 @@ const MANAGE_ROLES: WorkspaceRole[] = [
 ];
 const RETRY_DELAYS_MS = [1000, 5000, 30_000]; // 3 attempts total
 const MAX_BODY_PREVIEW = 500;
+
+/**
+ * Columns safe to return to the FE — the `secret` is omitted because
+ * exposing it on list/get/update responses lets any XSS-ish breach of
+ * the admin dashboard exfiltrate every subscriber's signing key. The
+ * secret is only returned ONCE at creation + on explicit rotation,
+ * never on subsequent reads.
+ */
+const WEBHOOK_PUBLIC_SELECT = {
+  id: true,
+  workspaceId: true,
+  name: true,
+  url: true,
+  events: true,
+  enabled: true,
+  createdById: true,
+  createdAt: true,
+  updatedAt: true,
+  createdBy: USER_SELECT_BASIC,
+} satisfies Prisma.WebhookSelect;
 
 type SlackishPayload = {
   text: string;
@@ -48,6 +69,7 @@ export class WebhooksService {
     private prisma: PrismaService,
     private workspacesService: WorkspacesService,
     private loggingConfig: LoggingConfigService,
+    private audit: AdminAuditService,
   ) {}
 
   static get knownEvents(): readonly string[] {
@@ -58,10 +80,12 @@ export class WebhooksService {
 
   async list(workspaceId: string, userId: string) {
     await this.workspacesService.assertMember(workspaceId, userId);
+    // Use the public select — secrets never leave the BE except via the
+    // one-time-show paths (create + rotate).
     return this.prisma.webhook.findMany({
       where: { workspaceId },
       orderBy: { createdAt: 'desc' },
-      include: { createdBy: USER_SELECT_BASIC },
+      select: WEBHOOK_PUBLIC_SELECT,
     });
   }
 
@@ -80,7 +104,20 @@ export class WebhooksService {
         enabled: dto.enabled ?? true,
         createdById: userId,
       },
+      select: { ...WEBHOOK_PUBLIC_SELECT, secret: true },
     });
+    this.audit.log(userId, 'WEBHOOK_CREATE', {
+      target: hook.id,
+      targetType: 'Webhook',
+      payload: {
+        workspaceId,
+        targetName: hook.name,
+        url: hook.url,
+        events: hook.events,
+      },
+    });
+    // One-shot secret reveal — caller's UI shows it with a "copy now,
+    // we won't show it again" notice. Subsequent reads NEVER include it.
     return { message: MSG.SUCCESS.WEBHOOK_CREATED, webhook: hook };
   }
 
@@ -91,11 +128,11 @@ export class WebhooksService {
     dto: UpdateWebhookDto,
   ) {
     await this.workspacesService.assertRole(workspaceId, userId, MANAGE_ROLES);
-    const exists = await this.prisma.webhook.findFirst({
+    const before = await this.prisma.webhook.findFirst({
       where: { id, workspaceId },
-      select: { id: true },
+      select: WEBHOOK_PUBLIC_SELECT,
     });
-    if (!exists) throw new NotFoundException(MSG.ERROR.WEBHOOK_NOT_FOUND);
+    if (!before) throw new NotFoundException(MSG.ERROR.WEBHOOK_NOT_FOUND);
     if (dto.events) this.assertKnownEvents(dto.events);
 
     const hook = await this.prisma.webhook.update({
@@ -106,6 +143,27 @@ export class WebhooksService {
         ...(dto.events !== undefined && { events: dto.events }),
         ...(dto.enabled !== undefined && { enabled: dto.enabled }),
       },
+      select: WEBHOOK_PUBLIC_SELECT,
+    });
+    this.audit.log(userId, 'WEBHOOK_UPDATE', {
+      target: hook.id,
+      targetType: 'Webhook',
+      payload: {
+        workspaceId,
+        targetName: hook.name,
+        from: {
+          name: before.name,
+          url: before.url,
+          events: before.events,
+          enabled: before.enabled,
+        },
+        to: {
+          name: hook.name,
+          url: hook.url,
+          events: hook.events,
+          enabled: hook.enabled,
+        },
+      },
     });
     return { message: MSG.SUCCESS.WEBHOOK_UPDATED, webhook: hook };
   }
@@ -114,11 +172,47 @@ export class WebhooksService {
     await this.workspacesService.assertRole(workspaceId, userId, MANAGE_ROLES);
     const exists = await this.prisma.webhook.findFirst({
       where: { id, workspaceId },
-      select: { id: true },
+      select: { id: true, name: true, url: true },
     });
     if (!exists) throw new NotFoundException(MSG.ERROR.WEBHOOK_NOT_FOUND);
     await this.prisma.webhook.delete({ where: { id } });
+    this.audit.log(userId, 'WEBHOOK_DELETE', {
+      target: id,
+      targetType: 'Webhook',
+      payload: {
+        workspaceId,
+        targetName: exists.name,
+        url: exists.url,
+      },
+    });
     return { message: MSG.SUCCESS.WEBHOOK_DELETED };
+  }
+
+  /**
+   * Rotate a webhook's HMAC secret. Returns the new secret ONCE — the
+   * subscriber must update their verification key immediately or future
+   * deliveries will fail signature check (and that's by design: stops
+   * a leaked secret from accepting forged deliveries).
+   */
+  async rotateSecret(workspaceId: string, id: string, userId: string) {
+    await this.workspacesService.assertRole(workspaceId, userId, MANAGE_ROLES);
+    const exists = await this.prisma.webhook.findFirst({
+      where: { id, workspaceId },
+      select: { id: true, name: true },
+    });
+    if (!exists) throw new NotFoundException(MSG.ERROR.WEBHOOK_NOT_FOUND);
+    const secret = `whsec_${randomBytes(24).toString('hex')}`;
+    const hook = await this.prisma.webhook.update({
+      where: { id },
+      data: { secret },
+      select: { ...WEBHOOK_PUBLIC_SELECT, secret: true },
+    });
+    this.audit.log(userId, 'WEBHOOK_ROTATE_SECRET', {
+      target: id,
+      targetType: 'Webhook',
+      payload: { workspaceId, targetName: exists.name },
+    });
+    return { message: MSG.SUCCESS.WEBHOOK_SECRET_ROTATED, webhook: hook };
   }
 
   async testSend(workspaceId: string, id: string, userId: string) {
@@ -130,6 +224,11 @@ export class WebhooksService {
     this.scheduleDelivery(hook, 'webhook.test', {
       message: 'Test event from Jira clone',
       sentAt: new Date().toISOString(),
+    });
+    this.audit.log(userId, 'WEBHOOK_TEST', {
+      target: id,
+      targetType: 'Webhook',
+      payload: { workspaceId, targetName: hook.name },
     });
     return { message: MSG.SUCCESS.WEBHOOK_TEST_SCHEDULED };
   }

@@ -9,6 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
 import { ENDPOINTS } from '@/core/constants';
 import { CurrentUser, Roles } from '@/core/decorators';
@@ -62,6 +63,11 @@ export class WebhooksController {
   }
 
   @Post(`:id/${W.WEBHOOKS}/:webhookId/test`)
+  // Tight throttle — each test schedules a real HTTP call to the
+  // subscriber URL. Without a cap an admin holding the button down
+  // could DDoS their own integration. 5/min matches the auth-sensitive
+  // throttle bucket already used elsewhere.
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @ApiOperation({ summary: 'Send a synthetic test event' })
   test(
     @Param('id') workspaceId: string,
@@ -69,6 +75,22 @@ export class WebhooksController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.testSend(workspaceId, webhookId, user.id);
+  }
+
+  @Post(`:id/${W.WEBHOOKS}/:webhookId/rotate-secret`)
+  // Rotating a secret is destructive (every running subscriber
+  // verification breaks until updated) — cap to prevent accidental
+  // rapid rotation that would lock out the subscriber.
+  @Throttle({ default: { ttl: 60_000, limit: 3 } })
+  @ApiOperation({
+    summary: 'Rotate the HMAC secret — returns the new value ONCE',
+  })
+  rotate(
+    @Param('id') workspaceId: string,
+    @Param('webhookId') webhookId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.rotateSecret(workspaceId, webhookId, user.id);
   }
 }
 

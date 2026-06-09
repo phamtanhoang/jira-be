@@ -22,7 +22,12 @@ export type AuditAction =
   | 'FLAG_DELETE'
   | 'THROTTLE_OVERRIDE_CREATE'
   | 'THROTTLE_OVERRIDE_UPDATE'
-  | 'THROTTLE_OVERRIDE_DELETE';
+  | 'THROTTLE_OVERRIDE_DELETE'
+  | 'WEBHOOK_CREATE'
+  | 'WEBHOOK_UPDATE'
+  | 'WEBHOOK_DELETE'
+  | 'WEBHOOK_TEST'
+  | 'WEBHOOK_ROTATE_SECRET';
 
 export type QueryAuditLog = {
   action?: AuditAction;
