@@ -480,15 +480,33 @@ export class AuthService {
     return { message: MSG.SUCCESS.PROFILE_UPDATED, user };
   }
 
+  /**
+   * Handles BOTH cases:
+   *  - Change existing password: `user.password` is set → require +
+   *    verify `currentPassword`, then update.
+   *  - First-time set (OAuth-only user with no password): `user.password`
+   *    is null → skip the current-password check, just set the new hash.
+   *    The user already proved ownership via OAuth (JWT cookies on the
+   *    request), so requiring a password they don't have would lock them
+   *    out of ever setting one.
+   *
+   * Either way, all refresh tokens are revoked afterwards so other
+   * sessions forcibly re-authenticate against the new credentials.
+   */
   async changePassword(userId: string, dto: ChangePasswordDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.password) {
-      throw new BadRequestException(MSG.ERROR.USER_NOT_FOUND);
-    }
+    if (!user) throw new NotFoundException(MSG.ERROR.USER_NOT_FOUND);
 
-    const valid = await validatePassword(dto.currentPassword, user.password);
-    if (!valid) {
-      throw new BadRequestException(MSG.ERROR.INVALID_CURRENT_PASSWORD);
+    const isFirstTimeSet = !user.password;
+
+    if (!isFirstTimeSet) {
+      if (!dto.currentPassword) {
+        throw new BadRequestException(MSG.ERROR.CURRENT_PASSWORD_REQUIRED);
+      }
+      const valid = await validatePassword(dto.currentPassword, user.password!);
+      if (!valid) {
+        throw new BadRequestException(MSG.ERROR.INVALID_CURRENT_PASSWORD);
+      }
     }
 
     const hashed = await hashPassword(dto.newPassword);
@@ -498,11 +516,17 @@ export class AuthService {
         where: { id: userId },
         data: { password: hashed },
       }),
-      // Revoke all refresh tokens for safety
+      // Revoke all refresh tokens for safety — both "change" and
+      // "first-time set" should force every other device to re-login.
       this.prisma.refreshToken.deleteMany({ where: { userId } }),
     ]);
 
-    return { message: MSG.SUCCESS.PASSWORD_CHANGED };
+    return {
+      message: isFirstTimeSet
+        ? MSG.SUCCESS.PASSWORD_SET
+        : MSG.SUCCESS.PASSWORD_CHANGED,
+      firstTimeSet: isFirstTimeSet,
+    };
   }
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {

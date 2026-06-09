@@ -110,7 +110,11 @@ export class PatService {
       .update({ where: { id: row.id }, data: { lastUsedAt: new Date() } })
       .catch(() => null);
 
-    return row.user;
+    // Derive `hasPassword` + strip the raw hash so PAT-authenticated
+    // requests see the same `AuthUser` shape as JWT-authenticated ones
+    // (FE relies on this flag to render set-vs-change-password UX).
+    const { password, ...rest } = row.user;
+    return { ...rest, hasPassword: !!password };
   }
 
   static isPatBearer(authHeader: string | undefined): string | null {

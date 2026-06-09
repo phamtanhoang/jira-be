@@ -20,11 +20,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    const user = await this.prisma.user.findUnique({
+    const row = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       select: AUTH_USER_SELECT,
     });
-    if (!user) throw new UnauthorizedException();
-    return user;
+    if (!row) throw new UnauthorizedException();
+
+    // Strip the raw password hash and replace with a derived boolean —
+    // FE needs to know whether the user has a password (to render the
+    // right "Change password" vs "Set password" UX) but must never see
+    // the hash itself.
+    const { password, ...rest } = row;
+    return { ...rest, hasPassword: !!password };
   }
 }
