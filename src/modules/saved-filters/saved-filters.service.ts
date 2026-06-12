@@ -29,10 +29,10 @@ export class SavedFiltersService {
         OR: [{ ownerId: userId }, { shared: true }],
       },
       include: { owner: USER_SELECT_BASIC },
-      orderBy: [
-        { ownerId: userId === '__placeholder__' ? 'asc' : 'desc' },
-        { name: 'asc' },
-      ],
+      // Order: alphabetical. The previous `ownerId: 'desc'` clause came
+      // from a copy-paste mistake — it sorted by another row's ownerId
+      // and accomplished nothing useful for the FE.
+      orderBy: [{ name: 'asc' }],
     });
   }
 

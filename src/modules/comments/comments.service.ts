@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -36,6 +37,20 @@ export class CommentsService {
       issue.project.id,
       userId,
     );
+
+    // If the new comment is a reply, the parent must live on the SAME
+    // issue. Without this check a caller can thread a comment under a
+    // parent from another issue (or workspace), corrupting the reply
+    // tree and leaking content from unrelated issues into the UI.
+    if (dto.parentId) {
+      const parent = await this.prisma.comment.findUnique({
+        where: { id: dto.parentId },
+        select: { issueId: true },
+      });
+      if (!parent || parent.issueId !== issueId) {
+        throw new BadRequestException(MSG.ERROR.PARENT_NOT_IN_ISSUE);
+      }
+    }
 
     const safeContent = sanitizeRichHtml(dto.content);
 

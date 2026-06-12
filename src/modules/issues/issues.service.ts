@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  forwardRef,
+} from '@nestjs/common';
 import {
   ActivityAction,
   IssueLinkType,
@@ -9,6 +15,7 @@ import {
   WorkspaceRole,
 } from '@prisma/client';
 import { CacheTagsService } from '@/core/cache/cache-tags.service';
+import { MSG } from '@/core/constants';
 import { WEEK_MS } from '@/core/constants/time.constant';
 import { PrismaService } from '@/core/database/prisma.service';
 import {
@@ -91,6 +98,12 @@ export class IssuesService {
       userId,
       project.workspaceId,
     );
+
+    // Cross-entity scope checks. Without these, a caller can pass an
+    // `epicId` / `parentId` from another project, or a `sprintId` from a
+    // different board — Prisma accepts the foreign key (the rows exist),
+    // leaving silently-corrupt cross-project references.
+    await this.assertIssueFkScope(dto, project.id);
 
     // Default to first column (To Do)
     const firstColumnId = project.board?.columns[0]?.id;
@@ -239,16 +252,20 @@ export class IssuesService {
       ...(customFieldClauses.length > 0 && { AND: customFieldClauses }),
     };
 
-    const take = filters?.take ?? 0; // 0 = no limit (backward compatible)
+    // `take = 0` historically meant "no limit" for the board / backlog
+    // view. We still honour that, but clamp the "no limit" path to a
+    // hard ceiling so a runaway caller can't load 100k issues into memory.
+    const ALL_ISSUES_HARD_CAP = 1000;
+    const take = filters?.take ?? 0;
 
     const include = withUserMeta(ISSUE_INCLUDE, userId);
 
-    // No pagination — return all (for board view, backlog DnD, etc.)
     if (!take) {
       const rows = await this.prisma.issue.findMany({
         where,
         include,
         orderBy: { createdAt: 'desc' },
+        take: ALL_ISSUES_HARD_CAP,
       });
       return rows.map(decorateUserMeta);
     }
@@ -396,6 +413,20 @@ export class IssuesService {
   async update(issueId: string, userId: string, dto: UpdateIssueDto) {
     const issue = await this.findById(issueId, userId);
 
+    // Reassigning epic/sprint must stay inside the issue's project.
+    // Otherwise a malicious caller could re-parent an issue under another
+    // workspace's epic. (UpdateIssueDto does not expose `parentId` — that's
+    // create-only, so the parent of an existing subtask is immutable.)
+    if (dto.epicId !== undefined || dto.sprintId !== undefined) {
+      await this.assertIssueFkScope(
+        {
+          epicId: dto.epicId ?? undefined,
+          sprintId: dto.sprintId ?? undefined,
+        },
+        issue.projectId,
+      );
+    }
+
     const data: Record<string, unknown> = {};
     const activities: {
       field: string;
@@ -423,7 +454,19 @@ export class IssuesService {
       if (field === 'customFields') continue;
       const oldVal = (issue as Record<string, unknown>)[field];
       if (field === 'dueDate' || field === 'startDate') {
-        data[field] = value ? new Date(value as string) : null;
+        // Empty string from the UI ("clear the date") needs to become
+        // null, NOT `new Date('')` which silently stores Invalid Date and
+        // crashes downstream serializers. A non-empty string that isn't a
+        // real date is also rejected.
+        if (value === null || value === '') {
+          data[field] = null;
+        } else {
+          const parsed = new Date(value as string);
+          if (Number.isNaN(parsed.getTime())) {
+            throw new BadRequestException(`${field} must be a valid ISO date`);
+          }
+          data[field] = parsed;
+        }
       } else if (field === 'description') {
         data[field] = value ? sanitizeRichHtml(value as string) : value;
       } else {
@@ -523,13 +566,22 @@ export class IssuesService {
     const isTransition = oldColumnId !== dto.columnId;
 
     // Read both columns in one round-trip — they're independent lookups.
+    // Include `board.projectId` on the destination column so we can verify
+    // it belongs to the SAME board as the issue — otherwise the move
+    // silently re-parents the issue under another project's board.
     const [newColumn, oldColumn] = await Promise.all([
-      this.prisma.boardColumn.findUnique({ where: { id: dto.columnId } }),
+      this.prisma.boardColumn.findUnique({
+        where: { id: dto.columnId },
+        include: { board: { select: { projectId: true } } },
+      }),
       oldColumnId && isTransition
         ? this.prisma.boardColumn.findUnique({ where: { id: oldColumnId } })
         : Promise.resolve(null),
     ]);
     if (!newColumn) throw new ColumnNotFoundException();
+    if (newColumn.board.projectId !== issue.projectId) {
+      throw new BadRequestException(MSG.ERROR.COLUMN_NOT_IN_BOARD);
+    }
 
     // Atomic: issue.update + activity.create commit together so a column
     // move never leaves an orphan activity row (or vice versa).
@@ -610,6 +662,50 @@ export class IssuesService {
       select: { issueId: true },
     });
     return rows.map((r) => r.issueId);
+  }
+
+  /**
+   * Assert that every foreign-key id on the create-issue payload points at
+   * an entity inside the same project. Without this, Prisma happily accepts
+   * an `epicId` from project B as the parent of an issue in project A —
+   * the row exists, the FK is valid in isolation, but the relationship is
+   * nonsense. Symptoms: subtask lists across projects, sprint counts that
+   * don't match, the FE showing a parent that you can't navigate to.
+   */
+  private async assertIssueFkScope(
+    dto: { parentId?: string; epicId?: string; sprintId?: string },
+    projectId: string,
+  ): Promise<void> {
+    const [parent, epic, sprint] = await Promise.all([
+      dto.parentId
+        ? this.prisma.issue.findUnique({
+            where: { id: dto.parentId },
+            select: { projectId: true },
+          })
+        : Promise.resolve(null),
+      dto.epicId
+        ? this.prisma.issue.findUnique({
+            where: { id: dto.epicId },
+            select: { projectId: true },
+          })
+        : Promise.resolve(null),
+      dto.sprintId
+        ? this.prisma.sprint.findUnique({
+            where: { id: dto.sprintId },
+            select: { board: { select: { projectId: true } } },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    if (dto.parentId && (!parent || parent.projectId !== projectId)) {
+      throw new BadRequestException(MSG.ERROR.PARENT_NOT_IN_PROJECT);
+    }
+    if (dto.epicId && (!epic || epic.projectId !== projectId)) {
+      throw new BadRequestException(MSG.ERROR.EPIC_NOT_IN_PROJECT);
+    }
+    if (dto.sprintId && (!sprint || sprint.board.projectId !== projectId)) {
+      throw new BadRequestException(MSG.ERROR.SPRINT_NOT_IN_PROJECT);
+    }
   }
 
   /**
