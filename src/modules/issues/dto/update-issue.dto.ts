@@ -21,6 +21,7 @@ export class UpdateIssueDto {
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()
+  @MaxLength(50_000)
   description?: string;
 
   @ApiPropertyOptional({ enum: IssueType })

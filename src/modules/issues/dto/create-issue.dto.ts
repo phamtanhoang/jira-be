@@ -30,6 +30,10 @@ export class CreateIssueDto {
   @ApiPropertyOptional({ example: 'Detailed description...' })
   @IsString()
   @IsOptional()
+  // Cap at 50 KB — Tiptap HTML can be verbose but legitimate content
+  // shouldn't approach this. Without a cap, a single request can pin a
+  // worker for seconds serialising / sanitising the HTML.
+  @MaxLength(50_000)
   description?: string;
 
   @ApiPropertyOptional({ enum: IssueType, example: IssueType.TASK })

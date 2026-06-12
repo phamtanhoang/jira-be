@@ -26,27 +26,30 @@ export class WorklogsService {
       userId,
     );
 
-    const worklog = await this.prisma.worklog.create({
-      data: {
-        issueId,
-        userId,
-        timeSpent: dto.timeSpent,
-        startedAt: new Date(dto.startedAt),
-        description: dto.description,
-      },
-      include: { user: USER_SELECT_BASIC },
+    // Worklog + activity commit together. A crash between the two would
+    // either inflate billing reports (worklog without audit) or hide work
+    // (activity without underlying worklog).
+    return this.prisma.$transaction(async (tx) => {
+      const worklog = await tx.worklog.create({
+        data: {
+          issueId,
+          userId,
+          timeSpent: dto.timeSpent,
+          startedAt: new Date(dto.startedAt),
+          description: dto.description,
+        },
+        include: { user: USER_SELECT_BASIC },
+      });
+      await tx.activity.create({
+        data: {
+          issueId,
+          userId,
+          action: ActivityAction.LOGGED_WORK,
+          newValue: `${dto.timeSpent}s`,
+        },
+      });
+      return worklog;
     });
-
-    await this.prisma.activity.create({
-      data: {
-        issueId,
-        userId,
-        action: ActivityAction.LOGGED_WORK,
-        newValue: `${dto.timeSpent}s`,
-      },
-    });
-
-    return worklog;
   }
 
   async findByIssue(issueId: string, userId: string) {

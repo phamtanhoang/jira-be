@@ -7,6 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Prisma } from '@prisma/client';
 import {
   ENV,
   MSG,
@@ -366,31 +367,36 @@ export class AuthService {
 
     if (!record || record.expiresAt < new Date()) {
       if (record) {
-        await this.prisma.refreshToken.delete({
-          where: { id: record.id },
-        });
+        // Best-effort cleanup of the expired row. Swallow errors so a DB
+        // hiccup here doesn't escape as a 500 — the caller already gets
+        // the 401 below, which is the contract for refresh failure.
+        await this.prisma.refreshToken
+          .delete({ where: { id: record.id } })
+          .catch(() => undefined);
       }
       throw new UnauthorizedException(MSG.ERROR.REFRESH_TOKEN_INVALID);
     }
 
-    // Rotate: delete old, create new. Carry the device metadata from the old
-    // row forward unless the request supplies something fresher — prevents
-    // refresh-on-new-network from silently erasing "original device" info.
-    await this.prisma.refreshToken.delete({
-      where: { id: record.id },
-    });
-
+    // Rotate atomically: issue the new token first, THEN delete the old one
+    // inside a single transaction. If the create fails the delete rolls back
+    // and the user keeps a working session. The previous "delete then
+    // create" order left a window where a crash mid-refresh permanently
+    // logged the user out.
     const mergedMeta: SessionMeta = {
       userAgent: meta?.userAgent ?? record.userAgent ?? undefined,
       ip: meta?.ip ?? record.ip ?? undefined,
     };
 
-    const tokens = await this.generateTokens(
-      record.user.id,
-      record.user.email,
-      mergedMeta,
-    );
-    return tokens;
+    return this.prisma.$transaction(async (tx) => {
+      const tokens = await this.generateTokens(
+        record.user.id,
+        record.user.email,
+        mergedMeta,
+        tx,
+      );
+      await tx.refreshToken.delete({ where: { id: record.id } });
+      return tokens;
+    });
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {
@@ -649,10 +655,16 @@ export class AuthService {
     return result.count;
   }
 
+  /**
+   * Mint a fresh access + refresh pair. `tx` lets callers join an existing
+   * `$transaction` (refresh-rotation uses this so create + delete commit
+   * together). Without `tx` we fall back to the default Prisma client.
+   */
   private async generateTokens(
     userId: string,
     email: string,
     meta?: SessionMeta,
+    tx?: Prisma.TransactionClient,
   ) {
     const accessExpiry = ENV.JWT_ACCESS_TOKEN_EXPIRATION;
     const refreshExpiry = ENV.JWT_REFRESH_TOKEN_EXPIRATION;
@@ -663,7 +675,8 @@ export class AuthService {
     );
 
     const refreshTokenValue = generateRefreshToken();
-    await this.prisma.refreshToken.create({
+    const db = tx ?? this.prisma;
+    await db.refreshToken.create({
       data: {
         token: refreshTokenValue,
         userId,

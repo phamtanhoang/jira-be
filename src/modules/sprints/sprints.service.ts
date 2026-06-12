@@ -189,18 +189,22 @@ export class SprintsService {
       throw new BadRequestException(MSG.ERROR.SPRINT_NOT_ACTIVE);
     }
 
-    // Move incomplete issues back to backlog (unset sprintId)
-    await this.prisma.issue.updateMany({
-      where: {
-        sprintId: sprint.id,
-        boardColumn: { category: { not: StatusCategory.DONE } },
-      },
-      data: { sprintId: null },
-    });
-
-    return this.prisma.sprint.update({
-      where: { id: sprint.id },
-      data: { status: SprintStatus.COMPLETED, endDate: new Date() },
+    // Atomic: move incomplete issues to the backlog AND mark the sprint
+    // COMPLETED in one commit. Without the transaction, a failure between
+    // the two writes could orphan in-flight issues against a still-ACTIVE
+    // sprint, blocking other sprints from starting.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.issue.updateMany({
+        where: {
+          sprintId: sprint.id,
+          boardColumn: { category: { not: StatusCategory.DONE } },
+        },
+        data: { sprintId: null },
+      });
+      return tx.sprint.update({
+        where: { id: sprint.id },
+        data: { status: SprintStatus.COMPLETED, endDate: new Date() },
+      });
     });
   }
 

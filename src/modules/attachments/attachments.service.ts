@@ -59,44 +59,71 @@ export class AttachmentsService {
       }
     }
 
-    const attachments: Awaited<
-      ReturnType<typeof this.prisma.attachment.create>
-    >[] = [];
-
-    for (const file of files) {
-      const fileUrl: string = await uploadFile(
-        file.buffer,
-        file.originalname,
-        file.mimetype,
-      );
-
-      const attachment = await this.prisma.attachment.create({
-        data: {
-          issueId,
-          uploadedById: userId,
-          fileName: file.originalname,
-          fileUrl,
-          fileSize: file.size,
-          mimeType: file.mimetype,
-        },
-        include: { uploadedBy: USER_SELECT_BASIC },
-      });
-
-      attachments.push(attachment);
+    // Two-phase upload to keep storage + DB consistent. We CAN'T put
+    // `uploadFile` inside a Prisma transaction (it's an external HTTP
+    // call to Supabase, would hold an open DB connection for seconds).
+    // So:
+    //   1. Upload every file first, collecting their URLs.
+    //   2. Inside `$transaction`, write all Attachment rows + the Activity
+    //      log together so the audit trail can't drift from the data.
+    //   3. If the DB transaction fails, best-effort cleanup of the
+    //      already-uploaded objects so we don't leak orphans in storage.
+    const uploaded: {
+      file: Express.Multer.File;
+      url: string;
+    }[] = [];
+    try {
+      for (const file of files) {
+        const url = await uploadFile(
+          file.buffer,
+          file.originalname,
+          file.mimetype,
+        );
+        uploaded.push({ file, url });
+      }
+    } catch (err) {
+      // Upload failed mid-batch — drop anything we already wrote so the
+      // workspace doesn't carry an invisible orphan.
+      for (const { url } of uploaded) {
+        await deleteFile(url).catch(() => undefined);
+      }
+      throw err;
     }
 
-    // Log single activity for batch upload
-    const fileNames = files.map((f) => f.originalname).join(', ');
-    await this.prisma.activity.create({
-      data: {
-        issueId,
-        userId,
-        action: ActivityAction.ATTACHED,
-        newValue: fileNames,
-      },
-    });
-
-    return attachments;
+    try {
+      const attachments = await this.prisma.$transaction(async (tx) => {
+        const rows = await Promise.all(
+          uploaded.map(({ file, url }) =>
+            tx.attachment.create({
+              data: {
+                issueId,
+                uploadedById: userId,
+                fileName: file.originalname,
+                fileUrl: url,
+                fileSize: file.size,
+                mimeType: file.mimetype,
+              },
+              include: { uploadedBy: USER_SELECT_BASIC },
+            }),
+          ),
+        );
+        await tx.activity.create({
+          data: {
+            issueId,
+            userId,
+            action: ActivityAction.ATTACHED,
+            newValue: files.map((f) => f.originalname).join(', '),
+          },
+        });
+        return rows;
+      });
+      return attachments;
+    } catch (err) {
+      for (const { url } of uploaded) {
+        await deleteFile(url).catch(() => undefined);
+      }
+      throw err;
+    }
   }
 
   async findByIssue(issueId: string, userId: string) {

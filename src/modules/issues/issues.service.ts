@@ -436,28 +436,33 @@ export class IssuesService {
       });
     }
 
-    const updated = await this.prisma.issue.update({
-      where: { id: issueId },
-      data,
-      include: withUserMeta(ISSUE_INCLUDE, userId),
-    });
-
-    // Log activities
-    if (activities.length > 0) {
-      await this.prisma.activity.createMany({
-        data: activities.map((a) => ({
-          issueId,
-          userId,
-          action:
-            a.field === 'assigneeId'
-              ? ActivityAction.ASSIGNED
-              : ActivityAction.UPDATED,
-          field: a.field,
-          oldValue: a.oldValue,
-          newValue: a.newValue,
-        })),
+    // Atomic: issue update + activity log commit together. Without the
+    // transaction a crash between the two would leave the issue mutated
+    // but the audit trail empty — same invariant the move() method below
+    // already enforces.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.issue.update({
+        where: { id: issueId },
+        data,
+        include: withUserMeta(ISSUE_INCLUDE, userId),
       });
-    }
+      if (activities.length > 0) {
+        await tx.activity.createMany({
+          data: activities.map((a) => ({
+            issueId,
+            userId,
+            action:
+              a.field === 'assigneeId'
+                ? ActivityAction.ASSIGNED
+                : ActivityAction.UPDATED,
+            field: a.field,
+            oldValue: a.oldValue,
+            newValue: a.newValue,
+          })),
+        });
+      }
+      return next;
+    });
 
     // Notify the new assignee when ownership changed (and they're not the
     // person doing the assigning). The unassigned → null case is silent.
