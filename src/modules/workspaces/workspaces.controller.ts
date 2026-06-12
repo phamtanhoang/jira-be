@@ -14,6 +14,7 @@ import { AuthUser } from '@/core/types';
 import {
   AddWorkspaceMemberDto,
   CreateWorkspaceDto,
+  TransferWorkspaceOwnerDto,
   UpdateWorkspaceDto,
   UpdateWorkspaceMemberDto,
 } from './dto';
@@ -61,6 +62,28 @@ export class WorkspacesController {
   async delete(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     await this.workspacesService.delete(id, user.id);
     return { message: MSG.SUCCESS.WORKSPACE_DELETED };
+  }
+
+  @Post(`${E.BY_ID}/${E.TRANSFER_OWNER}`)
+  @ApiOperation({
+    summary:
+      'Transfer workspace OWNER to another member (Owner only). ' +
+      'Current owner is demoted to ADMIN.',
+  })
+  async transferOwnership(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: TransferWorkspaceOwnerDto,
+  ) {
+    const workspace = await this.workspacesService.transferOwnership(
+      id,
+      user.id,
+      dto,
+    );
+    return {
+      message: MSG.SUCCESS.WORKSPACE_OWNERSHIP_TRANSFERRED,
+      workspace,
+    };
   }
 
   // ─── Members ──────────────────────────────────────────

@@ -5,6 +5,7 @@ export * from './cookie.util';
 export * from './csv.util';
 export * from './parse-json-storage.util';
 export * from './parse-mentions.util';
+export * from './permissions.util';
 export * from './sanitize.util';
 export * from './sanitize-html.util';
 export * from './slug.util';

@@ -255,6 +255,22 @@ export class ProjectsService {
       },
       include: { user: USER_SELECT_FULL },
     });
+
+    this.audit.log(userId, 'PROJECT_MEMBER_ADD', {
+      target: created.id,
+      targetType: 'ProjectMember',
+      payload: {
+        projectId,
+        workspaceId: project.workspaceId,
+        targetName: project.name,
+        targetKey: project.key,
+        targetUserId: targetUser.id,
+        targetUserName: targetUser.name,
+        targetUserEmail: targetUser.email,
+        role: created.role,
+      },
+    });
+
     // Project list visibility depends on membership for non-admin users.
     void this.cacheTags.invalidateTag(`workspace:${project.workspaceId}`);
     return created;
@@ -347,6 +363,7 @@ export class ProjectsService {
 
     const member = await this.prisma.projectMember.findUnique({
       where: { id: memberId },
+      include: { user: USER_SELECT_FULL },
     });
     if (!member || member.projectId !== projectId) {
       throw new NotFoundException(MSG.ERROR.NOT_PROJECT_MEMBER);
@@ -355,11 +372,29 @@ export class ProjectsService {
       throw new ForbiddenException(MSG.ERROR.CANNOT_REMOVE_OWNER);
     }
 
-    return this.prisma.projectMember.update({
+    const previousRole = member.role;
+    const updated = await this.prisma.projectMember.update({
       where: { id: memberId },
       data: { role: dto.role },
       include: { user: USER_SELECT_FULL },
     });
+
+    if (previousRole !== updated.role) {
+      this.audit.log(userId, 'PROJECT_MEMBER_ROLE_UPDATE', {
+        target: memberId,
+        targetType: 'ProjectMember',
+        payload: {
+          projectId,
+          targetUserId: member.userId,
+          targetUserName: member.user.name,
+          targetUserEmail: member.user.email,
+          from: previousRole,
+          to: updated.role,
+        },
+      });
+    }
+
+    return updated;
   }
 
   async removeMember(projectId: string, memberId: string, userId: string) {
@@ -370,6 +405,7 @@ export class ProjectsService {
 
     const member = await this.prisma.projectMember.findUnique({
       where: { id: memberId },
+      include: { user: USER_SELECT_FULL },
     });
     if (!member || member.projectId !== projectId) {
       throw new NotFoundException(MSG.ERROR.NOT_PROJECT_MEMBER);
@@ -378,7 +414,23 @@ export class ProjectsService {
       throw new ForbiddenException(MSG.ERROR.CANNOT_REMOVE_OWNER);
     }
 
-    return this.prisma.projectMember.delete({ where: { id: memberId } });
+    const removed = await this.prisma.projectMember.delete({
+      where: { id: memberId },
+    });
+
+    this.audit.log(userId, 'PROJECT_MEMBER_REMOVE', {
+      target: memberId,
+      targetType: 'ProjectMember',
+      payload: {
+        projectId,
+        targetUserId: member.userId,
+        targetUserName: member.user.name,
+        targetUserEmail: member.user.email,
+        role: member.role,
+      },
+    });
+
+    return removed;
   }
 
   // ─── Helpers ──────────────────────────────────────────

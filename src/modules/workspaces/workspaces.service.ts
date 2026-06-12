@@ -18,10 +18,12 @@ import {
   generateSlug,
   isUniqueConstraintError,
 } from '@/core/utils';
+import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { SettingsService } from '@/modules/settings/settings.service';
 import {
   AddWorkspaceMemberDto,
   CreateWorkspaceDto,
+  TransferWorkspaceOwnerDto,
   UpdateWorkspaceDto,
   UpdateWorkspaceMemberDto,
 } from './dto';
@@ -32,6 +34,7 @@ export class WorkspacesService {
     private prisma: PrismaService,
     private settings: SettingsService,
     private cacheTags: CacheTagsService,
+    private audit: AdminAuditService,
   ) {}
 
   async create(userId: string, dto: CreateWorkspaceDto) {
@@ -177,6 +180,85 @@ export class WorkspacesService {
     return deleted;
   }
 
+  /**
+   * Transfer OWNER role to another member of the workspace. Swaps the old
+   * and new owner's `role` columns + flips `Workspace.ownerId` atomically
+   * so the workspace never has zero owners or two owners.
+   *
+   * The previous owner is demoted to ADMIN — preserves their power without
+   * surprising them with "you've been kicked out" UX.
+   */
+  async transferOwnership(
+    workspaceId: string,
+    currentUserId: string,
+    dto: TransferWorkspaceOwnerDto,
+  ) {
+    await this.assertRole(workspaceId, currentUserId, [WorkspaceRole.OWNER]);
+
+    if (dto.newOwnerId === currentUserId) {
+      throw new BadRequestException(MSG.ERROR.CANNOT_TRANSFER_TO_SELF);
+    }
+
+    const newOwner = await this.prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: { workspaceId, userId: dto.newOwnerId },
+      },
+      include: {
+        user: { select: { id: true, name: true, email: true, image: true } },
+      },
+    });
+    if (!newOwner) {
+      throw new BadRequestException(MSG.ERROR.NEW_OWNER_NOT_MEMBER);
+    }
+
+    // Atomic flip: old → ADMIN, new → OWNER, workspace.ownerId → new.
+    // All three writes commit together so the workspace never observes
+    // zero OWNERs (which would lock everyone out of OWNER-only actions).
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.workspaceMember.update({
+        where: {
+          workspaceId_userId: { workspaceId, userId: currentUserId },
+        },
+        data: { role: WorkspaceRole.ADMIN },
+      });
+      await tx.workspaceMember.update({
+        where: {
+          workspaceId_userId: { workspaceId, userId: dto.newOwnerId },
+        },
+        data: { role: WorkspaceRole.OWNER },
+      });
+      return tx.workspace.update({
+        where: { id: workspaceId },
+        data: { ownerId: dto.newOwnerId },
+        include: {
+          owner: {
+            select: { id: true, name: true, email: true, image: true },
+          },
+        },
+      });
+    });
+
+    this.audit.log(currentUserId, 'WORKSPACE_OWNER_TRANSFER', {
+      target: workspaceId,
+      targetType: 'Workspace',
+      payload: {
+        workspaceId,
+        targetName: updated.name,
+        from: currentUserId,
+        to: dto.newOwnerId,
+        newOwnerName: newOwner.user.name,
+        newOwnerEmail: newOwner.user.email,
+      },
+    });
+
+    void this.cacheTags.invalidateTags([
+      `workspace:${workspaceId}`,
+      `user:${currentUserId}`,
+      `user:${dto.newOwnerId}`,
+    ]);
+    return updated;
+  }
+
   // ─── Members ──────────────────────────────────────────
 
   async addMember(
@@ -221,6 +303,19 @@ export class WorkspacesService {
         user: { select: { id: true, name: true, email: true, image: true } },
       },
     });
+
+    this.audit.log(userId, 'WORKSPACE_MEMBER_ADD', {
+      target: created.id,
+      targetType: 'WorkspaceMember',
+      payload: {
+        workspaceId,
+        targetUserId: user.id,
+        targetName: user.name,
+        targetEmail: user.email,
+        role: created.role,
+      },
+    });
+
     // The new member's workspace list now includes this workspace.
     void this.cacheTags.invalidateTag(`user:${user.id}`);
     return created;
@@ -239,6 +334,9 @@ export class WorkspacesService {
 
     const member = await this.prisma.workspaceMember.findUnique({
       where: { id: memberId },
+      include: {
+        user: { select: { id: true, name: true, email: true, image: true } },
+      },
     });
     if (!member || member.workspaceId !== workspaceId) {
       throw new NotFoundException(MSG.ERROR.NOT_WORKSPACE_MEMBER);
@@ -247,13 +345,31 @@ export class WorkspacesService {
       throw new ForbiddenException(MSG.ERROR.CANNOT_REMOVE_OWNER);
     }
 
-    return this.prisma.workspaceMember.update({
+    const previousRole = member.role;
+    const updated = await this.prisma.workspaceMember.update({
       where: { id: memberId },
       data: { role: dto.role },
       include: {
         user: { select: { id: true, name: true, email: true, image: true } },
       },
     });
+
+    if (previousRole !== updated.role) {
+      this.audit.log(userId, 'WORKSPACE_MEMBER_ROLE_UPDATE', {
+        target: memberId,
+        targetType: 'WorkspaceMember',
+        payload: {
+          workspaceId,
+          targetUserId: member.userId,
+          targetName: member.user.name,
+          targetEmail: member.user.email,
+          from: previousRole,
+          to: updated.role,
+        },
+      });
+    }
+
+    return updated;
   }
 
   async removeMember(workspaceId: string, memberId: string, userId: string) {
@@ -264,6 +380,9 @@ export class WorkspacesService {
 
     const member = await this.prisma.workspaceMember.findUnique({
       where: { id: memberId },
+      include: {
+        user: { select: { id: true, name: true, email: true, image: true } },
+      },
     });
     if (!member || member.workspaceId !== workspaceId) {
       throw new NotFoundException(MSG.ERROR.NOT_WORKSPACE_MEMBER);
@@ -275,6 +394,19 @@ export class WorkspacesService {
     const removed = await this.prisma.workspaceMember.delete({
       where: { id: memberId },
     });
+
+    this.audit.log(userId, 'WORKSPACE_MEMBER_REMOVE', {
+      target: memberId,
+      targetType: 'WorkspaceMember',
+      payload: {
+        workspaceId,
+        targetUserId: member.userId,
+        targetName: member.user.name,
+        targetEmail: member.user.email,
+        role: member.role,
+      },
+    });
+
     void this.cacheTags.invalidateTag(`user:${member.userId}`);
     return removed;
   }

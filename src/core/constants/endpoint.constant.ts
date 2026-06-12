@@ -37,6 +37,7 @@ export const ENDPOINTS = {
     BY_ID: ':id',
     MEMBERS: 'members',
     MEMBER_BY_ID: 'members/:memberId',
+    TRANSFER_OWNER: 'transfer-owner',
     INVITE_LINKS: ':id/invite-links',
     INVITE_LINK_BY_ID: ':id/invite-links/:linkId',
     JOIN: 'join/:token',
