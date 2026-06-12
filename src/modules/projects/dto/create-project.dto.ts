@@ -18,12 +18,19 @@ export class CreateProjectDto {
   @MaxLength(100)
   name!: string;
 
-  @ApiProperty({ example: 'PROJ', description: 'Uppercase 2-5 chars' })
-  @IsDefined()
+  @ApiPropertyOptional({
+    example: 'PROJ',
+    description:
+      'Optional. When omitted, the BE derives a key from the project name ' +
+      '(e.g. "Mobile Web" → "MW") and auto-suffixes on collision. Accepts ' +
+      'uppercase letters + digits, 2-10 chars.',
+  })
   @IsString()
-  @IsNotEmpty()
-  @Matches(/^[A-Z]{2,5}$/, { message: 'Key must be 2-5 uppercase letters' })
-  key!: string;
+  @IsOptional()
+  @Matches(/^[A-Z][A-Z0-9]{1,9}$/, {
+    message: 'Key must start with a letter and use uppercase letters + digits',
+  })
+  key?: string;
 
   @ApiProperty({ example: 'workspace-uuid' })
   @IsDefined()

@@ -14,7 +14,13 @@ import {
   ProjectNotFoundException,
   QuotaExceededException,
 } from '@/core/exceptions';
-import { assertProjectAccess, isUniqueConstraintError } from '@/core/utils';
+import {
+  MAX_KEY_RETRY,
+  assertProjectAccess,
+  candidateProjectKey,
+  generateProjectKey,
+  isUniqueConstraintError,
+} from '@/core/utils';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { BoardsService } from '@/modules/boards/boards.service';
 import { SettingsService } from '@/modules/settings/settings.service';
@@ -54,22 +60,20 @@ export class ProjectsService {
       }
     }
 
-    const existing = await this.prisma.project.findUnique({
-      where: {
-        workspaceId_key: { workspaceId: dto.workspaceId, key: dto.key },
-      },
-    });
-    if (existing) throw new BadRequestException(MSG.ERROR.PROJECT_KEY_EXISTS);
+    // Key is BE-generated when the client omits it — far better UX than
+    // making the user pick a unique 2-5 letter code in the middle of the
+    // create dialog. Either way we walk through `MARK`, `MARK2`, `MARK3` …
+    // until the (workspaceId, key) unique succeeds, so concurrent creates
+    // and duplicate user-typed keys both auto-resolve.
+    const baseKey = dto.key?.trim()
+      ? dto.key.trim().toUpperCase()
+      : generateProjectKey(dto.name);
 
-    // The pre-check above is a fast-path for the friendly error. Under
-    // concurrent requests two creators can both pass the check and race
-    // into `.create()`; Prisma then surfaces P2002 instead of our domain
-    // error. Translate it back so the FE shows the same toast either way.
-    const project = await this.prisma.project
-      .create({
+    const project = await this.createWithUniqueKey(baseKey, (key) =>
+      this.prisma.project.create({
         data: {
           name: dto.name,
-          key: dto.key,
+          key,
           description: dto.description,
           workspaceId: dto.workspaceId,
           leadId: userId,
@@ -83,13 +87,8 @@ export class ProjectsService {
           lead: USER_SELECT_FULL,
           members: { include: { user: USER_SELECT_FULL } },
         },
-      })
-      .catch((err: unknown) => {
-        if (isUniqueConstraintError(err, 'key')) {
-          throw new BadRequestException(MSG.ERROR.PROJECT_KEY_EXISTS);
-        }
-        throw err;
-      });
+      }),
+    );
 
     // Auto-create default board with columns
     await this.boardsService.createDefaultBoard(
@@ -101,6 +100,29 @@ export class ProjectsService {
     // Project list per user is cached by workspace tag.
     void this.cacheTags.invalidateTag(`workspace:${dto.workspaceId}`);
     return project;
+  }
+
+  /**
+   * Retry the supplied create with progressively-suffixed project keys
+   * (`MARK`, `MARK2`, `MARK3`, …) until the (workspaceId, key) composite
+   * unique succeeds. Final attempt uses a random suffix so the loop is
+   * bounded under heavy contention.
+   */
+  private async createWithUniqueKey<T>(
+    baseKey: string,
+    create: (key: string) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 0; attempt <= MAX_KEY_RETRY; attempt++) {
+      const key = candidateProjectKey(baseKey, attempt);
+      try {
+        return await create(key);
+      } catch (err) {
+        if (isUniqueConstraintError(err, 'key')) continue;
+        throw err;
+      }
+    }
+    // Unreachable in practice — the final attempt uses a random suffix.
+    throw new BadRequestException(MSG.ERROR.PROJECT_KEY_EXISTS);
   }
 
   async findAllByWorkspace(workspaceId: string, userId: string) {

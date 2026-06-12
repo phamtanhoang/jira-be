@@ -60,3 +60,76 @@ export function isUniqueConstraintError(
       : [];
   return fields.some((f) => f.toLowerCase().includes(target.toLowerCase()));
 }
+
+/**
+ * Derive a project key from a free-text name. Used by `ProjectsService` when
+ * the caller omits an explicit key — we'd rather let the BE pick a sensible
+ * default than ask the user to come up with one and then fail their request
+ * because it collides with another project in the same workspace.
+ *
+ * Rules:
+ * - Multi-word names → initials, up to 5 chars (e.g. "Mobile Web App" → "MWA").
+ * - Single-word names → first 4 chars uppercased (e.g. "Marketing" → "MARK").
+ * - Strips accents (Vietnamese: "Đội Triển Khai" → "DTK").
+ * - Always >= 2 chars; pads with random A-Z if the input has no usable letters.
+ */
+export function generateProjectKey(name: string): string {
+  const cleaned = name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toUpperCase();
+
+  const words = cleaned.split(/[^A-Z]+/).filter(Boolean);
+  if (words.length === 0) return randomKey(4);
+
+  if (words.length >= 2) {
+    const initials = words
+      .map((w) => w[0])
+      .join('')
+      .slice(0, 5);
+    if (initials.length >= 2) return initials;
+  }
+
+  const single = words[0];
+  if (single.length >= 2) return single.slice(0, 5);
+
+  // Single 1-char word — pad with a couple of random letters to satisfy the
+  // 2-char minimum.
+  return (single + randomKey(2)).slice(0, 5);
+}
+
+function randomKey(len: number): string {
+  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let out = '';
+  for (let i = 0; i < len; i++) {
+    out += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+  }
+  return out;
+}
+
+/**
+ * Candidate project key for the Nth retry attempt. Lets the service walk
+ * through "MARK" → "MARK2" → "MARK3" … on collision, then random suffix
+ * after MAX_KEY_RETRY. Total length is clamped to 10 to keep issue keys
+ * (`MARK2-42`) readable.
+ */
+export const MAX_KEY_RETRY = 9;
+const MAX_KEY_LENGTH = 10;
+
+export function candidateProjectKey(base: string, attempt: number): string {
+  const safeBase = base || randomKey(4);
+  if (attempt <= 0) return safeBase.slice(0, MAX_KEY_LENGTH);
+  if (attempt < MAX_KEY_RETRY) {
+    const suffix = String(attempt + 1);
+    // Trim base so base + suffix never exceeds the column limit. With the
+    // current cap of 10 chars and single-digit suffix this is rarely an
+    // issue, but the slice is defensive.
+    const room = MAX_KEY_LENGTH - suffix.length;
+    return safeBase.slice(0, room) + suffix;
+  }
+  // Final resort under heavy contention — random 2-char suffix.
+  const suffix = randomKey(2);
+  const room = MAX_KEY_LENGTH - suffix.length;
+  return safeBase.slice(0, room) + suffix;
+}
