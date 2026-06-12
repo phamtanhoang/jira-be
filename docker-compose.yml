@@ -6,6 +6,12 @@ services:
     env_file: .env
     ports:
       - "3031:3031"
+    # Hard memory cap to prevent runaway Nest process from OOM-killing the
+    # whole VM. t3.micro has 1GB total — BE 350MB, FE 200MB, Postgres
+    # 150MB, OS 210MB. Container restarts (via `restart: unless-stopped`)
+    # if it hits the limit.
+    mem_limit: 350m
+    memswap_limit: 550m
     # Liveness probe — hits the public /health endpoint (no auth, no
     # throttle). Marks the container "unhealthy" after 3 consecutive
     # failures so docker / orchestrator can restart it.
