@@ -83,7 +83,10 @@ export class LogsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async findAll(query: QueryLogsDto) {
-    const take = query.take ?? 50;
+    // Service-layer clamp — DTO has @Max(200), but an internal caller
+    // bypassing the HTTP pipeline must not be able to request unbounded
+    // page sizes (RequestLog grows fast on a noisy day).
+    const take = Math.min(Math.max(query.take ?? 50, 1), 200);
     const page = Math.max(1, query.page ?? 1);
     const where: Prisma.RequestLogWhereInput = {};
 

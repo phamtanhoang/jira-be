@@ -81,7 +81,11 @@ export class AdminAuditService {
   }
 
   async findAll(query: QueryAuditLog) {
-    const take = query.take ?? 50;
+    // Defensive clamp at the service layer. The DTO already has @Max(200)
+    // for the HTTP path, but an internal caller invoking this service
+    // directly would bypass class-validator. Clamping here makes the
+    // contract robust regardless of how `query` arrived.
+    const take = Math.min(Math.max(query.take ?? 50, 1), 200);
     const page = Math.max(1, query.page ?? 1);
     const where: Prisma.AdminAuditLogWhereInput = {};
     if (query.action) where.action = query.action;
