@@ -16,13 +16,13 @@ model Project {
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
-  members       ProjectMember[]
-  board         Board?
-  issues        Issue[]
-  labels        Label[]
-  savedFilters  SavedFilter[]
+  members        ProjectMember[]
+  board          Board?
+  issues         Issue[]
+  labels         Label[]
+  savedFilters   SavedFilter[]
   issueTemplates IssueTemplate[]
-  customFields  CustomFieldDef[]     @relation("ProjectCustomFields")
+  customFields   CustomFieldDef[]     @relation("ProjectCustomFields")
   recurringRules RecurringIssueRule[] @relation("ProjectRecurringRules")
 
   @@unique([workspaceId, key])

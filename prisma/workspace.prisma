@@ -1,7 +1,12 @@
 model Workspace {
   id          String   @id @default(uuid())
   name        String
-  slug        String   @unique
+  // Slug is NOT used in URLs — routes use `workspaceId` (UUID). It only
+  // surfaces in admin search and a few display strings. So uniqueness is
+  // scoped per-owner: two unrelated users can each have a "marketing"
+  // workspace without colliding. The same owner creating "Marketing" twice
+  // still gets auto-suffixed ("marketing", "marketing-2") by the service.
+  slug        String
   description String?
   logoUrl     String?
   ownerId     String
@@ -9,11 +14,12 @@ model Workspace {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  members  WorkspaceMember[]
-  projects Project[]
+  members     WorkspaceMember[]
+  projects    Project[]
   inviteLinks WorkspaceInviteLink[]
-  webhooks Webhook[] @relation("WebhookWorkspace")
+  webhooks    Webhook[]             @relation("WebhookWorkspace")
 
+  @@unique([ownerId, slug])
   @@index([ownerId])
 }
 

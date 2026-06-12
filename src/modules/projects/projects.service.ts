@@ -14,7 +14,7 @@ import {
   ProjectNotFoundException,
   QuotaExceededException,
 } from '@/core/exceptions';
-import { assertProjectAccess } from '@/core/utils';
+import { assertProjectAccess, isUniqueConstraintError } from '@/core/utils';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { BoardsService } from '@/modules/boards/boards.service';
 import { SettingsService } from '@/modules/settings/settings.service';
@@ -61,24 +61,35 @@ export class ProjectsService {
     });
     if (existing) throw new BadRequestException(MSG.ERROR.PROJECT_KEY_EXISTS);
 
-    const project = await this.prisma.project.create({
-      data: {
-        name: dto.name,
-        key: dto.key,
-        description: dto.description,
-        workspaceId: dto.workspaceId,
-        leadId: userId,
-        type: dto.type,
-        visibility: dto.visibility,
-        members: {
-          create: { userId, role: ProjectRole.LEAD },
+    // The pre-check above is a fast-path for the friendly error. Under
+    // concurrent requests two creators can both pass the check and race
+    // into `.create()`; Prisma then surfaces P2002 instead of our domain
+    // error. Translate it back so the FE shows the same toast either way.
+    const project = await this.prisma.project
+      .create({
+        data: {
+          name: dto.name,
+          key: dto.key,
+          description: dto.description,
+          workspaceId: dto.workspaceId,
+          leadId: userId,
+          type: dto.type,
+          visibility: dto.visibility,
+          members: {
+            create: { userId, role: ProjectRole.LEAD },
+          },
         },
-      },
-      include: {
-        lead: USER_SELECT_FULL,
-        members: { include: { user: USER_SELECT_FULL } },
-      },
-    });
+        include: {
+          lead: USER_SELECT_FULL,
+          members: { include: { user: USER_SELECT_FULL } },
+        },
+      })
+      .catch((err: unknown) => {
+        if (isUniqueConstraintError(err, 'key')) {
+          throw new BadRequestException(MSG.ERROR.PROJECT_KEY_EXISTS);
+        }
+        throw err;
+      });
 
     // Auto-create default board with columns
     await this.boardsService.createDefaultBoard(

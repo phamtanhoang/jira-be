@@ -6,7 +6,7 @@ import {
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { ProjectNotFoundException } from '@/core/exceptions';
-import { assertProjectAccess } from '@/core/utils';
+import { assertProjectAccess, isUniqueConstraintError } from '@/core/utils';
 import { CreateLabelDto, UpdateLabelDto } from './dto';
 
 @Injectable()
@@ -31,9 +31,19 @@ export class LabelsService {
     });
     if (existing) throw new BadRequestException(MSG.ERROR.LABEL_ALREADY_EXISTS);
 
-    return this.prisma.label.create({
-      data: { projectId: dto.projectId, name: dto.name, color: dto.color },
-    });
+    // Pre-check above is best-effort. Two concurrent creates can both pass
+    // and race into `.create()` — translate Prisma P2002 back to the same
+    // domain error so the FE shows one consistent toast.
+    try {
+      return await this.prisma.label.create({
+        data: { projectId: dto.projectId, name: dto.name, color: dto.color },
+      });
+    } catch (err) {
+      if (isUniqueConstraintError(err, 'name')) {
+        throw new BadRequestException(MSG.ERROR.LABEL_ALREADY_EXISTS);
+      }
+      throw err;
+    }
   }
 
   async findAllByProject(projectId: string, userId: string) {
@@ -80,13 +90,20 @@ export class LabelsService {
       if (dup) throw new BadRequestException(MSG.ERROR.LABEL_ALREADY_EXISTS);
     }
 
-    return this.prisma.label.update({
-      where: { id: labelId },
-      data: {
-        ...(dto.name !== undefined && { name: dto.name }),
-        ...(dto.color !== undefined && { color: dto.color }),
-      },
-    });
+    try {
+      return await this.prisma.label.update({
+        where: { id: labelId },
+        data: {
+          ...(dto.name !== undefined && { name: dto.name }),
+          ...(dto.color !== undefined && { color: dto.color }),
+        },
+      });
+    } catch (err) {
+      if (isUniqueConstraintError(err, 'name')) {
+        throw new BadRequestException(MSG.ERROR.LABEL_ALREADY_EXISTS);
+      }
+      throw err;
+    }
   }
 
   async delete(labelId: string, userId: string) {

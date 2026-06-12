@@ -1,48 +1,48 @@
 model Issue {
-  id            String        @id @default(uuid())
-  key           String        @unique
-  projectId     String
-  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  type          IssueType     @default(TASK)
-  summary       String
-  description   String?
-  priority      IssuePriority @default(MEDIUM)
-  reporterId    String
-  reporter      User          @relation("IssueReporter", fields: [reporterId], references: [id])
-  assigneeId    String?
-  assignee      User?         @relation("IssueAssignee", fields: [assigneeId], references: [id])
-  parentId      String?
-  parent        Issue?        @relation("IssueSubtasks", fields: [parentId], references: [id])
-  children      Issue[]       @relation("IssueSubtasks")
-  epicId        String?
-  epic          Issue?        @relation("EpicIssues", fields: [epicId], references: [id])
-  epicChildren  Issue[]       @relation("EpicIssues")
-  sprintId      String?
-  sprint        Sprint?       @relation(fields: [sprintId], references: [id])
-  boardColumnId String?
-  boardColumn   BoardColumn?  @relation(fields: [boardColumnId], references: [id])
-  position      Int           @default(0)
-  storyPoints   Int?
+  id                String        @id @default(uuid())
+  key               String        @unique
+  projectId         String
+  project           Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type              IssueType     @default(TASK)
+  summary           String
+  description       String?
+  priority          IssuePriority @default(MEDIUM)
+  reporterId        String
+  reporter          User          @relation("IssueReporter", fields: [reporterId], references: [id])
+  assigneeId        String?
+  assignee          User?         @relation("IssueAssignee", fields: [assigneeId], references: [id])
+  parentId          String?
+  parent            Issue?        @relation("IssueSubtasks", fields: [parentId], references: [id])
+  children          Issue[]       @relation("IssueSubtasks")
+  epicId            String?
+  epic              Issue?        @relation("EpicIssues", fields: [epicId], references: [id])
+  epicChildren      Issue[]       @relation("EpicIssues")
+  sprintId          String?
+  sprint            Sprint?       @relation(fields: [sprintId], references: [id])
+  boardColumnId     String?
+  boardColumn       BoardColumn?  @relation(fields: [boardColumnId], references: [id])
+  position          Int           @default(0)
+  storyPoints       Int?
   // Phase 2.3 — time tracking. Both stored as seconds; UI parses "2h 30m"
   // into total seconds. Nullable so existing rows stay valid.
   originalEstimate  Int?
   remainingEstimate Int?
-  dueDate       DateTime?
-  startDate     DateTime?
-  completedAt   DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  dueDate           DateTime?
+  startDate         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
-  labels        IssueLabel[]
-  comments      Comment[]
-  attachments   Attachment[]
-  worklogs      Worklog[]
-  activities    Activity[]
-  stars         IssueStar[]
-  watchers      IssueWatcher[]
-  outboundLinks IssueLink[]      @relation("IssueLinkSource")
-  inboundLinks  IssueLink[]      @relation("IssueLinkTarget")
-  shareTokens   IssueShareToken[]
+  labels            IssueLabel[]
+  comments          Comment[]
+  attachments       Attachment[]
+  worklogs          Worklog[]
+  activities        Activity[]
+  stars             IssueStar[]
+  watchers          IssueWatcher[]
+  outboundLinks     IssueLink[]        @relation("IssueLinkSource")
+  inboundLinks      IssueLink[]        @relation("IssueLinkTarget")
+  shareTokens       IssueShareToken[]
   customFieldValues CustomFieldValue[] @relation("IssueCustomFields")
 
   @@index([projectId])

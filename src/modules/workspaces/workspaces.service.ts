@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { WorkspaceRole } from '@prisma/client';
+import { Prisma, WorkspaceRole } from '@prisma/client';
 import { CacheTagsService } from '@/core/cache/cache-tags.service';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
@@ -12,6 +12,12 @@ import {
   InsufficientPermissionsException,
   WorkspaceAccessDeniedException,
 } from '@/core/exceptions';
+import {
+  MAX_SLUG_RETRY,
+  candidateSlug,
+  generateSlug,
+  isUniqueConstraintError,
+} from '@/core/utils';
 import { SettingsService } from '@/modules/settings/settings.service';
 import {
   AddWorkspaceMemberDto,
@@ -29,37 +35,60 @@ export class WorkspacesService {
   ) {}
 
   async create(userId: string, dto: CreateWorkspaceDto) {
-    const slug = this.generateSlug(dto.name);
-
-    const existing = await this.prisma.workspace.findUnique({
-      where: { slug },
-    });
-    if (existing)
-      throw new BadRequestException(MSG.ERROR.WORKSPACE_SLUG_EXISTS);
-
-    const created = await this.prisma.workspace.create({
-      data: {
-        name: dto.name,
-        slug,
-        description: dto.description,
-        ownerId: userId,
-        members: {
-          create: { userId, role: WorkspaceRole.OWNER },
+    // Slug is unique per owner — two unrelated users can each have a
+    // "marketing" workspace. Only the SAME owner creating "Marketing"
+    // twice triggers auto-suffix ("marketing", "marketing-2"). The retry
+    // loop also closes the TOCTOU race for the same user firing duplicate
+    // creates from two tabs.
+    const base = generateSlug(dto.name);
+    const created = await this.createWithUniqueSlug(base, (slug) =>
+      this.prisma.workspace.create({
+        data: {
+          name: dto.name,
+          slug,
+          description: dto.description,
+          ownerId: userId,
+          members: {
+            create: { userId, role: WorkspaceRole.OWNER },
+          },
         },
-      },
-      include: {
-        members: {
-          include: {
-            user: {
-              select: { id: true, name: true, email: true, image: true },
+        include: {
+          members: {
+            include: {
+              user: {
+                select: { id: true, name: true, email: true, image: true },
+              },
             },
           },
         },
-      },
-    });
+      }),
+    );
 
     void this.cacheTags.invalidateTag(`user:${userId}`);
     return created;
+  }
+
+  /**
+   * Retry the supplied create/update with progressively-suffixed slugs
+   * until the (ownerId, slug) composite unique succeeds. Final attempt
+   * uses a short random suffix so the loop is bounded in O(1) under
+   * heavy contention.
+   */
+  private async createWithUniqueSlug<T>(
+    baseSlug: string,
+    create: (slug: string) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 0; attempt <= MAX_SLUG_RETRY; attempt++) {
+      const slug = candidateSlug(baseSlug, attempt);
+      try {
+        return await create(slug);
+      } catch (err) {
+        if (isUniqueConstraintError(err, 'slug')) continue;
+        throw err;
+      }
+    }
+    // Unreachable in practice — the final attempt uses a random suffix.
+    throw new BadRequestException(MSG.ERROR.WORKSPACE_SLUG_EXISTS);
   }
 
   async findAllByUser(userId: string) {
@@ -108,20 +137,24 @@ export class WorkspacesService {
       WorkspaceRole.ADMIN,
     ]);
 
-    const data: Record<string, unknown> = {};
-    if (dto.name !== undefined) {
-      data.name = dto.name;
-      data.slug = this.generateSlug(dto.name);
-
-      const existing = await this.prisma.workspace.findUnique({
-        where: { slug: data.slug as string },
-      });
-      if (existing && existing.id !== workspaceId) {
-        throw new BadRequestException(MSG.ERROR.WORKSPACE_SLUG_EXISTS);
-      }
-    }
+    const data: Prisma.WorkspaceUpdateInput = {};
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.logoUrl !== undefined) data.logoUrl = dto.logoUrl;
+
+    if (dto.name !== undefined) {
+      data.name = dto.name;
+      const base = generateSlug(dto.name);
+      // Re-use the retry loop so renaming to a popular name auto-suffixes
+      // instead of hard-failing — same UX as create.
+      const updated = await this.createWithUniqueSlug(base, (slug) =>
+        this.prisma.workspace.update({
+          where: { id: workspaceId },
+          data: { ...data, slug },
+        }),
+      );
+      void this.cacheTags.invalidateTag(`workspace:${workspaceId}`);
+      return updated;
+    }
 
     const updated = await this.prisma.workspace.update({
       where: { id: workspaceId },
@@ -247,16 +280,6 @@ export class WorkspacesService {
   }
 
   // ─── Helpers ──────────────────────────────────────────
-
-  private generateSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/[\s_]+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
-  }
 
   async assertMember(workspaceId: string, userId: string) {
     const member = await this.prisma.workspaceMember.findUnique({

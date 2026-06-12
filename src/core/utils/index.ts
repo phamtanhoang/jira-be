@@ -7,5 +7,6 @@ export * from './parse-json-storage.util';
 export * from './parse-mentions.util';
 export * from './sanitize.util';
 export * from './sanitize-html.util';
+export * from './slug.util';
 export * from './storage.util';
 export * from './timezone.util';
