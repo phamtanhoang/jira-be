@@ -88,7 +88,9 @@ export class IssuesBulkService {
         select: { board: { select: { projectId: true } } },
       });
       if (!sprint || !projectIds.includes(sprint.board.projectId)) {
-        throw new BadRequestException('Sprint does not belong to issue project');
+        throw new BadRequestException(
+          'Sprint does not belong to issue project',
+        );
       }
       // Additionally, every issue must share that sprint's project.
       const sprintProjectId = sprint.board.projectId;
@@ -114,7 +116,9 @@ export class IssuesBulkService {
         },
       });
       if (memberships !== workspaceIds.length) {
-        throw new BadRequestException('Assignee is not a member of all workspaces');
+        throw new BadRequestException(
+          'Assignee is not a member of all workspaces',
+        );
       }
     }
 

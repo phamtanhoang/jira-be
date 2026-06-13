@@ -575,7 +575,8 @@ function extractSessionMeta(req: Request): SessionMeta {
 function mapOAuthErrorToCode(message: string): string {
   const m = message.toLowerCase();
   if (m.includes('verify') && m.includes('email')) return 'oauth_verify_first';
-  if (m.includes('inactive') || m.includes('deactivated')) return 'oauth_inactive';
+  if (m.includes('inactive') || m.includes('deactivated'))
+    return 'oauth_inactive';
   if (m.includes('no_email') || m.includes('email')) return 'oauth_no_email';
   return 'oauth_failed';
 }

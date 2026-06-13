@@ -1,6 +1,6 @@
-import { BadRequestException } from '@nestjs/common';
 import { promises as dns } from 'node:dns';
 import * as net from 'node:net';
+import { BadRequestException } from '@nestjs/common';
 
 // IPv4/IPv6 ranges we never let webhooks reach. Even when the hostname
 // looks safe ("api.example.com"), an attacker controlling DNS can point
@@ -68,7 +68,9 @@ export async function assertSafeWebhookUrl(url: string): Promise<void> {
   if (net.isIP(host)) {
     const family = net.isIPv4(host) ? 4 : 6;
     if (family === 4 ? isPrivateIPv4(host) : isPrivateIPv6(host)) {
-      throw new BadRequestException('Webhook URL must not target a private network');
+      throw new BadRequestException(
+        'Webhook URL must not target a private network',
+      );
     }
     return;
   }
@@ -84,10 +86,14 @@ export async function assertSafeWebhookUrl(url: string): Promise<void> {
   }
   for (const { address, family } of addrs) {
     if (family === 4 && isPrivateIPv4(address)) {
-      throw new BadRequestException('Webhook URL must not target a private network');
+      throw new BadRequestException(
+        'Webhook URL must not target a private network',
+      );
     }
     if (family === 6 && isPrivateIPv6(address)) {
-      throw new BadRequestException('Webhook URL must not target a private network');
+      throw new BadRequestException(
+        'Webhook URL must not target a private network',
+      );
     }
   }
 }

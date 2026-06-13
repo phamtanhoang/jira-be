@@ -27,12 +27,12 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       clientSecret: SECRET,
       callbackURL: CALLBACK,
       scope: ['email', 'profile'],
-      // CSRF protection — Passport signs a nonce + stores it in the
-      // session; the callback rejects mismatched state. Without this,
-      // an attacker can pre-craft a callback URL with their own code
-      // and silently link an attacker-controlled identity to a victim
-      // who happens to click the link while signed in.
-      state: true,
+      // TODO(security): OAuth `state` CSRF protection. Passport's built-in
+      // `state: true` requires express-session middleware (not currently
+      // wired in main.ts). A proper fix needs either: (1) add session
+      // middleware just for the OAuth flow, or (2) implement a signed
+      // short-lived state cookie set on `GET /auth/google` and verified
+      // in the callback. Tracking as a known security gap until then.
     });
   }
 

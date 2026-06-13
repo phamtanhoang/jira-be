@@ -35,8 +35,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Strip the raw password hash and replace with a derived boolean —
     // FE needs to know whether the user has a password (to render the
     // right "Change password" vs "Set password" UX) but must never see
-    // the hash itself.
-    const { password, active: _active, ...rest } = row;
+    // the hash itself. `active` is also dropped from the returned shape
+    // since AuthUser doesn't expose it.
+    const { password, active, ...rest } = row;
+    void active;
     return { ...rest, hasPassword: !!password };
   }
 }

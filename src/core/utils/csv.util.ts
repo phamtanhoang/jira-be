@@ -16,8 +16,14 @@ const FORMULA_TRIGGERS = new Set(['=', '+', '-', '@', '\t', '\r']);
 export function csvEscape(value: unknown): string {
   if (value == null) return '';
   let s: string;
+  // Only string inputs get the formula-injection prefix — numeric /
+  // boolean / bigint values are spreadsheet-safe by construction (their
+  // stringified form is just digits/`true`/`false`), and prefixing
+  // `-1.5` → `'-1.5` would break legitimate numeric exports.
+  let allowFormulaGuard = false;
   if (typeof value === 'string') {
     s = value;
+    allowFormulaGuard = true;
   } else if (
     typeof value === 'number' ||
     typeof value === 'boolean' ||
@@ -27,7 +33,7 @@ export function csvEscape(value: unknown): string {
   } else {
     s = JSON.stringify(value);
   }
-  if (s.length > 0 && FORMULA_TRIGGERS.has(s[0])) {
+  if (allowFormulaGuard && s.length > 0 && FORMULA_TRIGGERS.has(s[0])) {
     s = `'${s}`;
   }
   if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;

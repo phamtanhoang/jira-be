@@ -40,7 +40,11 @@ export class CreateWebhookDto {
   // require_tld=true blocks bare hostnames like `localhost`. The service
   // additionally resolves the hostname and rejects private/loopback/
   // link-local/metadata IPs to prevent SSRF — `IsUrl` is syntactic only.
-  @IsUrl({ require_tld: true, require_protocol: true, protocols: ['https', 'http'] })
+  @IsUrl({
+    require_tld: true,
+    require_protocol: true,
+    protocols: ['https', 'http'],
+  })
   @MaxLength(2048)
   url!: string;
 
@@ -71,7 +75,11 @@ export class UpdateWebhookDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUrl({ require_tld: true, require_protocol: true, protocols: ['https', 'http'] })
+  @IsUrl({
+    require_tld: true,
+    require_protocol: true,
+    protocols: ['https', 'http'],
+  })
   @MaxLength(2048)
   url?: string;
 

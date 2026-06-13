@@ -166,7 +166,10 @@ export class CommentsService {
       where: { id: commentId },
       include: {
         issue: {
-          select: { id: true, project: { select: { id: true, workspaceId: true } } },
+          select: {
+            id: true,
+            project: { select: { id: true, workspaceId: true } },
+          },
         },
       },
     });
@@ -212,7 +215,10 @@ export class CommentsService {
       where: { id: commentId },
       include: {
         issue: {
-          select: { id: true, project: { select: { id: true, workspaceId: true } } },
+          select: {
+            id: true,
+            project: { select: { id: true, workspaceId: true } },
+          },
         },
       },
     });

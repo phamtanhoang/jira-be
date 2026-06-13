@@ -20,7 +20,7 @@ const UUID_AUTHOR = 'a0000000-0000-0000-0000-000000000001';
 const UUID_REPORTER = 'r0000000-0000-0000-0000-000000000001';
 
 function createMockPrisma() {
-  return {
+  const mock: Record<string, unknown> = {
     issue: {
       findUnique: jest.fn(),
     },
@@ -41,6 +41,22 @@ function createMockPrisma() {
     projectMember: {
       findUnique: jest.fn().mockResolvedValue({ role: 'MEMBER' }),
     },
+  };
+  // CommentsService now wraps `create` and `update`/`delete` in
+  // `prisma.$transaction(async (tx) => …)`. The shim invokes the
+  // callback with the mock itself as `tx` so the test's assertions on
+  // `comment.create` / `activity.create` still see the calls.
+  mock.$transaction = jest.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+    fn(mock),
+  );
+  return mock as Record<string, unknown> & {
+    $transaction: jest.Mock;
+    issue: { findUnique: jest.Mock };
+    comment: { create: jest.Mock };
+    activity: { create: jest.Mock };
+    issueWatcher: { findMany: jest.Mock; upsert: jest.Mock };
+    workspaceMember: { findUnique: jest.Mock };
+    projectMember: { findUnique: jest.Mock };
   };
 }
 

@@ -5,7 +5,6 @@ import {
   IsEnum,
   IsDefined,
   IsOptional,
-  IsString,
   IsUUID,
   ArrayMaxSize,
   ArrayMinSize,
