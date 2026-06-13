@@ -37,7 +37,11 @@ export class CreateWebhookDto {
       'Receiver URL. URLs matching hooks.slack.com are auto-formatted to Slack attachment payloads.',
   })
   @IsDefined()
-  @IsUrl({ require_tld: false, require_protocol: true })
+  // require_tld=true blocks bare hostnames like `localhost`. The service
+  // additionally resolves the hostname and rejects private/loopback/
+  // link-local/metadata IPs to prevent SSRF — `IsUrl` is syntactic only.
+  @IsUrl({ require_tld: true, require_protocol: true, protocols: ['https', 'http'] })
+  @MaxLength(2048)
   url!: string;
 
   @ApiProperty({
@@ -67,7 +71,8 @@ export class UpdateWebhookDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsUrl({ require_tld: false, require_protocol: true })
+  @IsUrl({ require_tld: true, require_protocol: true, protocols: ['https', 'http'] })
+  @MaxLength(2048)
   url?: string;
 
   @ApiPropertyOptional({ type: [String] })

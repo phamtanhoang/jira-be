@@ -75,8 +75,21 @@ export class WorklogsService {
   async update(worklogId: string, userId: string, dto: UpdateWorklogDto) {
     const worklog = await this.prisma.worklog.findUnique({
       where: { id: worklogId },
+      include: {
+        issue: {
+          select: { project: { select: { id: true, workspaceId: true } } },
+        },
+      },
     });
     if (!worklog) throw new NotFoundException(MSG.ERROR.WORKLOG_NOT_FOUND);
+    // Workspace-access check before author check: a user removed from
+    // the workspace must not be able to edit their old worklogs.
+    await assertProjectAccess(
+      this.prisma,
+      worklog.issue.project.workspaceId,
+      worklog.issue.project.id,
+      userId,
+    );
     if (worklog.userId !== userId)
       throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);
 
@@ -96,8 +109,19 @@ export class WorklogsService {
   async delete(worklogId: string, userId: string) {
     const worklog = await this.prisma.worklog.findUnique({
       where: { id: worklogId },
+      include: {
+        issue: {
+          select: { project: { select: { id: true, workspaceId: true } } },
+        },
+      },
     });
     if (!worklog) throw new NotFoundException(MSG.ERROR.WORKLOG_NOT_FOUND);
+    await assertProjectAccess(
+      this.prisma,
+      worklog.issue.project.workspaceId,
+      worklog.issue.project.id,
+      userId,
+    );
     if (worklog.userId !== userId)
       throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);
 

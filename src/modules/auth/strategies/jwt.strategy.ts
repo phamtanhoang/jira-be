@@ -26,11 +26,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
     if (!row) throw new UnauthorizedException();
 
+    // Deactivated users keep a valid access token until the 15-min TTL
+    // expires. Refresh tokens are wiped on deactivate, but the in-hand
+    // access token is not — reject here so admin "deactivate" is
+    // effective immediately, not in 15 minutes.
+    if (!row.active) throw new UnauthorizedException();
+
     // Strip the raw password hash and replace with a derived boolean —
     // FE needs to know whether the user has a password (to render the
     // right "Change password" vs "Set password" UX) but must never see
     // the hash itself.
-    const { password, ...rest } = row;
+    const { password, active: _active, ...rest } = row;
     return { ...rest, hasPassword: !!password };
   }
 }

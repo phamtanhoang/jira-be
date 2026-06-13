@@ -8,6 +8,7 @@ import {
 import { Prisma, WorkspaceRole } from '@prisma/client';
 import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { assertSafeWebhookUrl } from '@/core/utils';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
 import { LoggingConfigService } from '@/modules/logging-config/logging-config.service';
 import { WorkspacesService } from '@/modules/workspaces/workspaces.service';
@@ -92,6 +93,10 @@ export class WebhooksService {
   async create(workspaceId: string, userId: string, dto: CreateWebhookDto) {
     await this.workspacesService.assertRole(workspaceId, userId, MANAGE_ROLES);
     this.assertKnownEvents(dto.events);
+    // SSRF defense — resolve the hostname and reject private/loopback/
+    // metadata IPs before persisting. Any workspace admin can register a
+    // webhook, so this is reachable from end-user input.
+    await assertSafeWebhookUrl(dto.url);
 
     const secret = `whsec_${randomBytes(24).toString('hex')}`;
     const hook = await this.prisma.webhook.create({
@@ -134,6 +139,7 @@ export class WebhooksService {
     });
     if (!before) throw new NotFoundException(MSG.ERROR.WEBHOOK_NOT_FOUND);
     if (dto.events) this.assertKnownEvents(dto.events);
+    if (dto.url !== undefined) await assertSafeWebhookUrl(dto.url);
 
     const hook = await this.prisma.webhook.update({
       where: { id },

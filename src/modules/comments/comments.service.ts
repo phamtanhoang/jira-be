@@ -54,25 +54,31 @@ export class CommentsService {
 
     const safeContent = sanitizeRichHtml(dto.content);
 
-    const comment = await this.prisma.comment.create({
-      data: {
-        issueId,
-        authorId: userId,
-        content: safeContent,
-        parentId: dto.parentId,
-      },
-      include: {
-        author: USER_SELECT_BASIC,
-        replies: { include: { author: USER_SELECT_BASIC } },
-      },
-    });
-
-    await this.prisma.activity.create({
-      data: {
-        issueId,
-        userId,
-        action: ActivityAction.COMMENTED,
-      },
+    // Comment + activity must commit together. Without the transaction
+    // a crash between writes leaves the audit log inconsistent — the
+    // user sees their comment but the activity feed and webhooks
+    // disagree about whether anything happened.
+    const comment = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.comment.create({
+        data: {
+          issueId,
+          authorId: userId,
+          content: safeContent,
+          parentId: dto.parentId,
+        },
+        include: {
+          author: USER_SELECT_BASIC,
+          replies: { include: { author: USER_SELECT_BASIC } },
+        },
+      });
+      await tx.activity.create({
+        data: {
+          issueId,
+          userId,
+          action: ActivityAction.COMMENTED,
+        },
+      });
+      return created;
     });
 
     // Fan-out: reporter + assignee + watchers, minus the comment author.
@@ -158,27 +164,80 @@ export class CommentsService {
   async update(commentId: string, userId: string, dto: UpdateCommentDto) {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
+      include: {
+        issue: {
+          select: { id: true, project: { select: { id: true, workspaceId: true } } },
+        },
+      },
     });
     if (!comment) throw new NotFoundException(MSG.ERROR.COMMENT_NOT_FOUND);
+    // Workspace-access first: a user removed from the workspace must
+    // not be able to edit their old comments. Author check comes second
+    // so the error message order matches user expectations (no-access
+    // > not-yours).
+    await assertProjectAccess(
+      this.prisma,
+      comment.issue.project.workspaceId,
+      comment.issue.project.id,
+      userId,
+    );
     if (comment.authorId !== userId)
       throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);
 
-    return this.prisma.comment.update({
-      where: { id: commentId },
-      data: { content: sanitizeRichHtml(dto.content) },
-      include: { author: USER_SELECT_BASIC },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const u = await tx.comment.update({
+        where: { id: commentId },
+        data: { content: sanitizeRichHtml(dto.content) },
+        include: { author: USER_SELECT_BASIC },
+      });
+      // Edit activity — same rationale as create: keep the audit feed
+      // honest about who changed what when. We record under the
+      // generic UPDATED action with `field: 'comment'` so the
+      // existing ActivityAction enum doesn't need a migration.
+      await tx.activity.create({
+        data: {
+          issueId: comment.issueId,
+          userId,
+          action: ActivityAction.UPDATED,
+          field: 'comment',
+        },
+      });
+      return u;
     });
+    return updated;
   }
 
   async delete(commentId: string, userId: string) {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
+      include: {
+        issue: {
+          select: { id: true, project: { select: { id: true, workspaceId: true } } },
+        },
+      },
     });
     if (!comment) throw new NotFoundException(MSG.ERROR.COMMENT_NOT_FOUND);
+    await assertProjectAccess(
+      this.prisma,
+      comment.issue.project.workspaceId,
+      comment.issue.project.id,
+      userId,
+    );
     if (comment.authorId !== userId)
       throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);
 
-    return this.prisma.comment.delete({ where: { id: commentId } });
+    return this.prisma.$transaction(async (tx) => {
+      const deleted = await tx.comment.delete({ where: { id: commentId } });
+      await tx.activity.create({
+        data: {
+          issueId: comment.issueId,
+          userId,
+          action: ActivityAction.UPDATED,
+          field: 'comment.deleted',
+        },
+      });
+      return deleted;
+    });
   }
 }
 

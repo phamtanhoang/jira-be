@@ -167,19 +167,33 @@ export class SprintsService {
   async start(sprintId: string, userId: string) {
     const sprint = await this.findById(sprintId, userId);
 
-    // Check no other active sprint on same board
-    const activeSprint = await this.prisma.sprint.findFirst({
-      where: { boardId: sprint.boardId, status: SprintStatus.ACTIVE },
-    });
-    if (activeSprint)
-      throw new BadRequestException(MSG.ERROR.SPRINT_ALREADY_ACTIVE);
+    // Check-then-act must run inside a transaction. Without it, two
+    // concurrent `start` calls on different PLANNING sprints can both
+    // pass the active-sprint probe before either flips status → two
+    // ACTIVE sprints on the same board. Inside `$transaction` we use
+    // `updateMany` with a status guard so the database, not the app,
+    // enforces "still PLANNING when we flip it".
+    return this.prisma.$transaction(async (tx) => {
+      const activeSprint = await tx.sprint.findFirst({
+        where: { boardId: sprint.boardId, status: SprintStatus.ACTIVE },
+        select: { id: true },
+      });
+      if (activeSprint)
+        throw new BadRequestException(MSG.ERROR.SPRINT_ALREADY_ACTIVE);
 
-    return this.prisma.sprint.update({
-      where: { id: sprint.id },
-      data: {
-        status: SprintStatus.ACTIVE,
-        startDate: sprint.startDate ?? new Date(),
-      },
+      const claim = await tx.sprint.updateMany({
+        where: { id: sprint.id, status: SprintStatus.PLANNING },
+        data: {
+          status: SprintStatus.ACTIVE,
+          startDate: sprint.startDate ?? new Date(),
+        },
+      });
+      if (claim.count !== 1) {
+        // Either a concurrent caller flipped it first, or status was
+        // not PLANNING anymore.
+        throw new BadRequestException(MSG.ERROR.SPRINT_ALREADY_ACTIVE);
+      }
+      return tx.sprint.findUniqueOrThrow({ where: { id: sprint.id } });
     });
   }
 

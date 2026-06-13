@@ -11,3 +11,4 @@ export * from './sanitize-html.util';
 export * from './slug.util';
 export * from './storage.util';
 export * from './timezone.util';
+export * from './webhook-url.util';

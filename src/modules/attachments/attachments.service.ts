@@ -192,19 +192,38 @@ export class AttachmentsService {
     const attachment = assertExists(
       await this.prisma.attachment.findUnique({
         where: { id: attachmentId },
+        include: {
+          issue: {
+            select: { project: { select: { id: true, workspaceId: true } } },
+          },
+        },
       }),
       MSG.ERROR.ATTACHMENT_NOT_FOUND,
+    );
+
+    // Workspace-access check first — a user removed from the workspace
+    // must not be able to delete attachments they previously uploaded.
+    await assertProjectAccess(
+      this.prisma,
+      attachment.issue.project.workspaceId,
+      attachment.issue.project.id,
+      userId,
     );
 
     if (attachment.uploadedById !== userId) {
       throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);
     }
 
-    await deleteFile(attachment.fileUrl);
-
+    // DB first, storage second. If the DB delete fails the row stays —
+    // the user sees their attachment in the UI and can retry. The
+    // previous order risked deleting the storage object then leaving an
+    // undeletable orphan row pointing at a 404.
     const result = await this.prisma.attachment.delete({
       where: { id: attachmentId },
     });
+    // Best-effort storage cleanup — never throw out of delete on this.
+    await deleteFile(attachment.fileUrl).catch(() => undefined);
+
     this.audit.log(userId, 'ATTACHMENT_DELETE', {
       target: attachmentId,
       targetType: 'Attachment',

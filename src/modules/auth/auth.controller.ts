@@ -417,7 +417,10 @@ export class AuthController {
         `OAuth callback failed for ${profile.provider}/${profile.email}: ${message}`,
         err instanceof Error ? err.stack : undefined,
       );
-      const code = message ? encodeURIComponent(message) : 'oauth_failed';
+      // Map to opaque codes — leaking raw messages exposes internal
+      // state (Prisma errors, env-var hints, etc.) to anyone who can
+      // inspect a victim's redirect URL.
+      const code = mapOAuthErrorToCode(message);
       return res.redirect(`${frontend}/sign-in?error=${code}`);
     }
   }
@@ -563,4 +566,16 @@ function extractSessionMeta(req: Request): SessionMeta {
     userAgent: typeof ua === 'string' ? ua : undefined,
     ip,
   };
+}
+
+// Map raw error messages to a small, opaque set of codes the FE knows
+// how to render. We never echo back the original message — it can carry
+// internal state (Prisma error class, env-var hints, stack frames) that
+// has no business in a URL anyone with the user's clipboard can read.
+function mapOAuthErrorToCode(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes('verify') && m.includes('email')) return 'oauth_verify_first';
+  if (m.includes('inactive') || m.includes('deactivated')) return 'oauth_inactive';
+  if (m.includes('no_email') || m.includes('email')) return 'oauth_no_email';
+  return 'oauth_failed';
 }

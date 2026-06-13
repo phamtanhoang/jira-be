@@ -27,6 +27,12 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       clientSecret: SECRET,
       callbackURL: CALLBACK,
       scope: ['email', 'profile'],
+      // CSRF protection — Passport signs a nonce + stores it in the
+      // session; the callback rejects mismatched state. Without this,
+      // an attacker can pre-craft a callback URL with their own code
+      // and silently link an attacker-controlled identity to a victim
+      // who happens to click the link while signed in.
+      state: true,
     });
   }
 

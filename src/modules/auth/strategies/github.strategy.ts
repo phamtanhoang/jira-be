@@ -20,6 +20,8 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
       callbackURL: CALLBACK,
       // user:email so GitHub returns even private email addresses
       scope: ['user:email'],
+      // CSRF protection — see google.strategy.ts for rationale.
+      state: true,
     });
   }
 

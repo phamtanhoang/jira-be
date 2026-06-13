@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ProjectType, StatusCategory } from '@prisma/client';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
@@ -124,6 +129,20 @@ export class BoardsService {
       throw new ColumnNotFoundException();
     }
 
+    // Deleting a column with issues silently orphans them — Prisma's
+    // default `SetNull` cascade sets `Issue.boardColumnId = null` and
+    // the card disappears from every board view. Refuse the delete so
+    // the user is forced to move the issues first. The FE should show
+    // the count + a "Move issues to ..." picker.
+    const issueCount = await this.prisma.issue.count({
+      where: { boardColumnId: columnId },
+    });
+    if (issueCount > 0) {
+      throw new ConflictException(
+        `Column has ${issueCount} issue(s). Move them to another column first.`,
+      );
+    }
+
     return this.prisma.boardColumn.delete({ where: { id: columnId } });
   }
 
@@ -133,6 +152,28 @@ export class BoardsService {
     dto: ReorderColumnsDto,
   ) {
     await this.assertBoardAccess(boardId, userId);
+
+    // Verify every supplied id belongs to THIS board AND the supplied
+    // list covers every column. Without these checks a caller could:
+    //   1. Reposition columns from another board they admin
+    //   2. Drop a column id from the list, leaving its position stale
+    const existing = await this.prisma.boardColumn.findMany({
+      where: { boardId },
+      select: { id: true },
+    });
+    const existingSet = new Set(existing.map((c) => c.id));
+    const incomingSet = new Set(dto.columnIds);
+    if (incomingSet.size !== dto.columnIds.length) {
+      throw new BadRequestException('Duplicate column id in reorder payload');
+    }
+    if (
+      incomingSet.size !== existingSet.size ||
+      dto.columnIds.some((id) => !existingSet.has(id))
+    ) {
+      throw new BadRequestException(
+        'Reorder payload must list every column of this board exactly once',
+      );
+    }
 
     await this.prisma.$transaction(
       dto.columnIds.map((id, index) =>

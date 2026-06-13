@@ -25,6 +25,18 @@ const logger = new Logger('Bootstrap');
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Sit behind a single reverse proxy in production (Caddy/nginx/Cloudflare).
+  // Without trust-proxy set, Express ignores `X-Forwarded-For` and `req.ip`
+  // reports the socket peer — every request looks like it came from the
+  // proxy IP, defeating per-IP throttle. With `1` we trust ONE hop of
+  // X-Forwarded-For and reject spoofed extra hops.
+  const expressApp = app.getHttpAdapter().getInstance() as {
+    set?: (key: string, value: number | boolean) => void;
+  };
+  if (typeof expressApp.set === 'function') {
+    expressApp.set('trust proxy', 1);
+  }
+
   // Security
   app.use(
     helmet({

@@ -182,7 +182,7 @@ export class IssuesService {
   }
 
   async findAll(
-    projectId: string,
+    projectId: string | undefined,
     userId: string,
     filters?: {
       sprintId?: string;
@@ -205,16 +205,34 @@ export class IssuesService {
       labelIds?: string[];
     },
   ) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
-    });
-    if (!project) throw new ProjectNotFoundException();
+    // Global Cmd-K search omits projectId. Without this branch the
+    // service hits `findUnique({where:{id: undefined}})` which throws
+    // PrismaClientValidationError → 500. When projectId is missing,
+    // restrict to projects the user can see and require a search term
+    // (no point listing every accessible issue with no filter).
+    let projectScope: Prisma.IssueWhereInput;
+    if (!projectId) {
+      if (!filters?.search || filters.search.trim().length < 2) {
+        return [];
+      }
+      projectScope = {
+        project: {
+          workspace: { members: { some: { userId } } },
+        },
+      };
+    } else {
+      const project = await this.prisma.project.findUnique({
+        where: { id: projectId },
+      });
+      if (!project) throw new ProjectNotFoundException();
 
-    await this.projectsService.assertProjectAccess(
-      project.id,
-      userId,
-      project.workspaceId,
-    );
+      await this.projectsService.assertProjectAccess(
+        project.id,
+        userId,
+        project.workspaceId,
+      );
+      projectScope = { projectId };
+    }
 
     const customFieldClauses = await this.buildCustomFieldClauses(
       projectId,
@@ -222,7 +240,7 @@ export class IssuesService {
     );
 
     const where: Prisma.IssueWhereInput = {
-      projectId,
+      ...projectScope,
       ...(filters?.sprintId &&
         filters.sprintId !== 'backlog' && { sprintId: filters.sprintId }),
       ...(filters?.sprintId === 'backlog' && { sprintId: null }),
@@ -715,10 +733,13 @@ export class IssuesService {
    * coerce raw input strings into the right column (text/number/date/select).
    */
   private async buildCustomFieldClauses(
-    projectId: string,
+    projectId: string | undefined,
     raw: Record<string, string | string[]> | undefined,
   ): Promise<Prisma.IssueWhereInput[]> {
     if (!raw) return [];
+    // Custom fields are project-scoped; the global search path doesn't
+    // pick a project, so nothing to filter on.
+    if (!projectId) return [];
     const fieldIds = Object.keys(raw).filter((id) => {
       const v = raw[id];
       if (Array.isArray(v)) return v.length > 0;

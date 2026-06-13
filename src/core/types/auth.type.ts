@@ -16,6 +16,7 @@ export const AUTH_USER_SELECT = {
   image: true,
   role: true,
   password: true,
+  active: true,
   createdAt: true,
 } satisfies Prisma.UserSelect;
 

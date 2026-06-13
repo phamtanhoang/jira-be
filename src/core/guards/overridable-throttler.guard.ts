@@ -42,8 +42,12 @@ export class OverridableThrottlerGuard extends ThrottlerGuard {
       .switchToHttp()
       .getRequest<Request & { user?: { id?: string } }>();
     const userId = req.user?.id;
-    const ip = (req.ip ?? req.headers['x-forwarded-for'] ?? '').toString();
-    const target = userId ? `user:${userId}` : `ip:${ip.split(',')[0].trim()}`;
+    // ONLY `req.ip` — Express respects `app.set('trust proxy', 1)` and
+    // parses `X-Forwarded-For` securely (rejects spoofed extra hops).
+    // Reading the raw header here let attackers send a fresh X-F-F per
+    // request and dodge the throttle.
+    const ip = (req.ip ?? '').toString();
+    const target = userId ? `user:${userId}` : `ip:${ip}`;
 
     const override = await this.lookupOverride(target);
 

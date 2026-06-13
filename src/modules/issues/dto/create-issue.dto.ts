@@ -9,6 +9,8 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -16,8 +18,7 @@ import {
 export class CreateIssueDto {
   @ApiProperty({ example: 'project-uuid' })
   @IsDefined()
-  @IsString()
-  @IsNotEmpty()
+  @IsUUID()
   projectId!: string;
 
   @ApiProperty({ example: 'Implement login page' })
@@ -47,31 +48,34 @@ export class CreateIssueDto {
   priority?: IssuePriority;
 
   @ApiPropertyOptional({ example: 'user-uuid' })
-  @IsString()
   @IsOptional()
+  @IsUUID()
   assigneeId?: string;
 
   @ApiPropertyOptional({
     example: 'parent-issue-uuid',
     description: 'For subtasks',
   })
-  @IsString()
   @IsOptional()
+  @IsUUID()
   parentId?: string;
 
   @ApiPropertyOptional({ example: 'epic-issue-uuid' })
-  @IsString()
   @IsOptional()
+  @IsUUID()
   epicId?: string;
 
   @ApiPropertyOptional({ example: 'sprint-uuid' })
-  @IsString()
   @IsOptional()
+  @IsUUID()
   sprintId?: string;
 
   @ApiPropertyOptional({ example: 3 })
   @IsInt()
   @Min(0)
+  // Cap at 1000 — burndown + velocity math break catastrophically when
+  // a single issue carries millions of points.
+  @Max(1000)
   @IsOptional()
   storyPoints?: number;
 

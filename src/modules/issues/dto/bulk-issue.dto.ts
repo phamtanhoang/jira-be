@@ -6,25 +6,33 @@ import {
   IsDefined,
   IsOptional,
   IsString,
+  IsUUID,
+  ArrayMaxSize,
   ArrayMinSize,
 } from 'class-validator';
+
+// 200 is generous for any reasonable UI bulk-select workflow (whole
+// page selections are ~50 rows). Without an upper bound a caller could
+// pass 100k ids and trigger a massive `findMany` + `updateMany`.
+const BULK_ISSUE_MAX = 200;
 
 export class BulkUpdateIssueDto {
   @ApiProperty({ example: ['uuid-1', 'uuid-2'] })
   @IsDefined()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID('all', { each: true })
   @ArrayMinSize(1)
+  @ArrayMaxSize(BULK_ISSUE_MAX)
   issueIds!: string[];
 
   @ApiPropertyOptional()
-  @IsString()
   @IsOptional()
+  @IsUUID()
   sprintId?: string | null;
 
   @ApiPropertyOptional()
-  @IsString()
   @IsOptional()
+  @IsUUID()
   assigneeId?: string | null;
 
   @ApiPropertyOptional({ enum: IssuePriority })
@@ -37,7 +45,8 @@ export class BulkDeleteIssueDto {
   @ApiProperty({ example: ['uuid-1', 'uuid-2'] })
   @IsDefined()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID('all', { each: true })
   @ArrayMinSize(1)
+  @ArrayMaxSize(BULK_ISSUE_MAX)
   issueIds!: string[];
 }
