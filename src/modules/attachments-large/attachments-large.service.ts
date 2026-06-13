@@ -29,6 +29,8 @@ import {
   uploadChunkObject,
   uploadFile,
 } from '@/core/utils';
+import { RealtimeEventsService } from '@/modules/events/events.service';
+import { REALTIME_EVENTS } from '@/modules/events/events.types';
 import {
   EventLoggerService,
   EVENTS,
@@ -44,6 +46,7 @@ export class AttachmentsLargeService {
     private prisma: PrismaService,
     private settings: SettingsService,
     private events: EventLoggerService,
+    private realtime: RealtimeEventsService,
   ) {}
 
   async init(userId: string, dto: InitLargeUploadDto) {
@@ -447,6 +450,22 @@ export class AttachmentsLargeService {
     // wasted storage, not a data bug; the cron sweep will catch any
     // straggler too.
     void deleteChunkObjects(session.id, session.totalChunks);
+
+    // Realtime — same payload shape as the single-shot upload path so
+    // FE consumers can use one handler for both.
+    const issue = await this.prisma.issue.findUnique({
+      where: { id: session.issueId },
+      select: { projectId: true },
+    });
+    if (issue) {
+      this.realtime.emit({
+        type: REALTIME_EVENTS.ATTACHMENT_ADDED,
+        actorId: userId,
+        projectId: issue.projectId,
+        issueId: session.issueId,
+        data: { count: 1 },
+      });
+    }
 
     return attachment;
   }

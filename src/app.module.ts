@@ -23,6 +23,7 @@ import { BoardsModule } from '@/modules/boards/boards.module';
 import { CommentsModule } from '@/modules/comments/comments.module';
 import { CustomFieldsModule } from '@/modules/custom-fields/custom-fields.module';
 import { DebugModule } from '@/modules/debug/debug.module';
+import { EventsModule } from '@/modules/events/events.module';
 import { FeatureFlagsModule } from '@/modules/feature-flags/feature-flags.module';
 import { GdprModule } from '@/modules/gdpr/gdpr.module';
 import { HealthModule } from '@/modules/health/health.module';
@@ -58,6 +59,7 @@ import { WorkspacesModule } from '@/modules/workspaces/workspaces.module';
     ScheduleModule.forRoot(),
     AppCacheModule,
     PrismaModule,
+    EventsModule,
     LoggingConfigModule,
     LogsModule,
     AuthModule,

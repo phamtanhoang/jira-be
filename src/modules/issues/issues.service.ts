@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -25,6 +26,8 @@ import {
 } from '@/core/exceptions';
 import { newMentions, sanitizeRichHtml } from '@/core/utils';
 import { CustomFieldsService } from '@/modules/custom-fields/custom-fields.service';
+import { RealtimeEventsService } from '@/modules/events/events.service';
+import { REALTIME_EVENTS } from '@/modules/events/events.types';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { ProjectsService } from '@/modules/projects/projects.service';
 import { WebhooksService } from '@/modules/webhooks/webhooks.service';
@@ -80,6 +83,7 @@ export class IssuesService {
     private shareService: IssuesShareService,
     @Inject(forwardRef(() => IssuesWatchersService))
     private watchersService: IssuesWatchersService,
+    private realtime: RealtimeEventsService,
   ) {}
 
   async create(userId: string, dto: CreateIssueDto) {
@@ -176,6 +180,17 @@ export class IssuesService {
       }
 
       void this.fireIssueWebhook('issue.created', issue, userId);
+
+      // Realtime — every open board/backlog viewer refreshes their
+      // issues list. Per-issue channel is meaningless here (no one is
+      // viewing an issue that just got created).
+      this.realtime.emit({
+        type: REALTIME_EVENTS.ISSUE_CREATED,
+        actorId: userId,
+        projectId: project.id,
+        issueId: issue.id,
+        issueKey: issue.key,
+      });
 
       return decorateUserMeta(issue);
     });
@@ -445,6 +460,29 @@ export class IssuesService {
       );
     }
 
+    // Changing the reporter is reserved for LEAD/ADMIN — mirrors the
+    // FE gate so a hand-crafted PATCH can't bypass it. The new reporter
+    // must also be a member of the project.
+    if (dto.reporterId !== undefined && dto.reporterId !== issue.reporterId) {
+      const actor = await this.prisma.projectMember.findFirst({
+        where: { projectId: issue.projectId, userId },
+        select: { role: true },
+      });
+      if (!actor || (actor.role !== 'LEAD' && actor.role !== 'ADMIN')) {
+        throw new ForbiddenException(
+          'Only project leads or admins can change the reporter',
+        );
+      }
+      const newReporterMembership = await this.prisma.projectMember.count({
+        where: { projectId: issue.projectId, userId: dto.reporterId },
+      });
+      if (newReporterMembership === 0) {
+        throw new BadRequestException(
+          'New reporter must be a member of this project',
+        );
+      }
+    }
+
     const data: Record<string, unknown> = {};
     const activities: {
       field: string;
@@ -575,6 +613,16 @@ export class IssuesService {
       `issue:key:${updated.key}`,
     ]);
 
+    // Realtime — push to every open tab viewing this issue / project so
+    // they invalidate their React Query cache without polling.
+    this.realtime.emit({
+      type: REALTIME_EVENTS.ISSUE_UPDATED,
+      actorId: userId,
+      projectId: issue.projectId,
+      issueId,
+      issueKey: updated.key,
+    });
+
     return decorateUserMeta(updated);
   }
 
@@ -654,6 +702,17 @@ export class IssuesService {
       `issue:key:${updated.key}`,
     ]);
 
+    // Realtime — drag-drop moves are the highest-value cross-user
+    // collaboration signal; every board viewer should see the card
+    // shift columns within a second.
+    this.realtime.emit({
+      type: REALTIME_EVENTS.ISSUE_MOVED,
+      actorId: userId,
+      projectId: issue.projectId,
+      issueId,
+      issueKey: updated.key,
+    });
+
     return decorateUserMeta(updated);
   }
 
@@ -665,6 +724,15 @@ export class IssuesService {
       `issue:id:${issueId}`,
       `issue:key:${issue.key}`,
     ]);
+
+    this.realtime.emit({
+      type: REALTIME_EVENTS.ISSUE_DELETED,
+      actorId: userId,
+      projectId: issue.projectId,
+      issueId,
+      issueKey: issue.key,
+    });
+
     return result;
   }
 

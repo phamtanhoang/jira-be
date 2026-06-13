@@ -12,6 +12,8 @@ import {
   ProjectNotFoundException,
 } from '@/core/exceptions';
 import { assertProjectAccess } from '@/core/utils';
+import { RealtimeEventsService } from '@/modules/events/events.service';
+import { REALTIME_EVENTS } from '@/modules/events/events.types';
 import { CreateColumnDto, UpdateColumnDto, ReorderColumnsDto } from './dto';
 
 const DEFAULT_COLUMNS = [
@@ -22,7 +24,19 @@ const DEFAULT_COLUMNS = [
 
 @Injectable()
 export class BoardsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private realtime: RealtimeEventsService,
+  ) {}
+
+  /** Fire-and-forget realtime emit for any column-structure change. */
+  private emit(projectId: string, actorId: string) {
+    this.realtime.emit({
+      type: REALTIME_EVENTS.BOARD_CHANGED,
+      actorId,
+      projectId,
+    });
+  }
 
   async createDefaultBoard(
     projectId: string,
@@ -83,7 +97,7 @@ export class BoardsService {
       _max: { position: true },
     });
 
-    return this.prisma.boardColumn.create({
+    const created = await this.prisma.boardColumn.create({
       data: {
         boardId: board.id,
         name: dto.name,
@@ -92,6 +106,8 @@ export class BoardsService {
         wipLimit: dto.wipLimit,
       },
     });
+    this.emit(board.project.id, userId);
+    return created;
   }
 
   async updateColumn(
@@ -100,7 +116,7 @@ export class BoardsService {
     userId: string,
     dto: UpdateColumnDto,
   ) {
-    await this.assertBoardAccess(boardId, userId);
+    const board = await this.assertBoardAccess(boardId, userId);
 
     const column = await this.prisma.boardColumn.findUnique({
       where: { id: columnId },
@@ -109,7 +125,7 @@ export class BoardsService {
       throw new ColumnNotFoundException();
     }
 
-    return this.prisma.boardColumn.update({
+    const updated = await this.prisma.boardColumn.update({
       where: { id: columnId },
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
@@ -117,10 +133,12 @@ export class BoardsService {
         ...(dto.wipLimit !== undefined && { wipLimit: dto.wipLimit }),
       },
     });
+    this.emit(board.project.id, userId);
+    return updated;
   }
 
   async deleteColumn(boardId: string, columnId: string, userId: string) {
-    await this.assertBoardAccess(boardId, userId);
+    const board = await this.assertBoardAccess(boardId, userId);
 
     const column = await this.prisma.boardColumn.findUnique({
       where: { id: columnId },
@@ -143,7 +161,11 @@ export class BoardsService {
       );
     }
 
-    return this.prisma.boardColumn.delete({ where: { id: columnId } });
+    const result = await this.prisma.boardColumn.delete({
+      where: { id: columnId },
+    });
+    this.emit(board.project.id, userId);
+    return result;
   }
 
   async reorderColumns(
@@ -151,7 +173,7 @@ export class BoardsService {
     userId: string,
     dto: ReorderColumnsDto,
   ) {
-    await this.assertBoardAccess(boardId, userId);
+    const board = await this.assertBoardAccess(boardId, userId);
 
     // Verify every supplied id belongs to THIS board AND the supplied
     // list covers every column. Without these checks a caller could:
@@ -184,10 +206,12 @@ export class BoardsService {
       ),
     );
 
-    return this.prisma.boardColumn.findMany({
+    const result = await this.prisma.boardColumn.findMany({
       where: { boardId },
       orderBy: { position: 'asc' },
     });
+    this.emit(board.project.id, userId);
+    return result;
   }
 
   // ─── Helpers ──────────────────────────────────────────

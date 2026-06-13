@@ -1,6 +1,8 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { MSG } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
+import { RealtimeEventsService } from '@/modules/events/events.service';
+import { REALTIME_EVENTS } from '@/modules/events/events.types';
 import { PushService } from '@/modules/push/push.service';
 import type { NotificationPayload } from './dto';
 
@@ -11,6 +13,7 @@ export class NotificationsService {
   constructor(
     private prisma: PrismaService,
     private push: PushService,
+    private realtime: RealtimeEventsService,
   ) {}
 
   // ─── Write side ─────────────────────────────────────
@@ -28,6 +31,19 @@ export class NotificationsService {
           body: payload.body,
           link: payload.link,
         },
+      })
+      .then(() => {
+        // Realtime push so the recipient's bell + notifications page
+        // refresh without waiting for the polling tick. actorId is the
+        // recipient too here — the trigger service (issues, comments)
+        // is the real actor, but this method doesn't know who. The FE
+        // filter on `recipientId` is what gets it to the right tab.
+        this.realtime.emit({
+          type: REALTIME_EVENTS.NOTIFICATION_CREATED,
+          actorId: userId,
+          recipientId: userId,
+          data: { type: payload.type },
+        });
       })
       .catch((err) => {
         this.logger.error(
@@ -66,6 +82,18 @@ export class NotificationsService {
           body: payload.body,
           link: payload.link,
         })),
+      })
+      .then(() => {
+        // One realtime event per recipient — each lands on that user's
+        // /events/me channel only (recipientId filter).
+        for (const userId of unique) {
+          this.realtime.emit({
+            type: REALTIME_EVENTS.NOTIFICATION_CREATED,
+            actorId: userId,
+            recipientId: userId,
+            data: { type: payload.type },
+          });
+        }
       })
       .catch((err) => {
         this.logger.error(

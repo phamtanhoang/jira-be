@@ -37,6 +37,11 @@ const ALLOWED_TAGS = [
   'span',
   'a',
   'img',
+  // Tiptap TaskList + TaskItem render <ul data-type="taskList"> with
+  // <li data-checked> containing <label><input type=checkbox><div>.
+  'div',
+  'label',
+  'input',
 ];
 
 const SHARED_ATTRS = [
@@ -45,6 +50,7 @@ const SHARED_ATTRS = [
   'data-id',
   'data-label',
   'data-mention',
+  'data-checked',
   'title',
 ];
 
@@ -54,13 +60,26 @@ const OPTIONS: sanitizeHtml.IOptions = {
     a: ['href', 'target', 'rel', ...SHARED_ATTRS],
     img: ['src', 'alt', ...SHARED_ATTRS],
     span: SHARED_ATTRS,
-    '*': SHARED_ATTRS,
+    input: ['type', 'checked', 'disabled', ...SHARED_ATTRS],
+    label: ['contenteditable', ...SHARED_ATTRS],
+    li: ['data-checked', ...SHARED_ATTRS],
+    // `style` is allowed at top level so TextAlign's
+    // `style="text-align: center"` survives. The `allowedStyles` block
+    // below tightens which CSS properties + values are accepted.
+    '*': [...SHARED_ATTRS, 'style'],
   },
   allowedSchemes: ['http', 'https', 'mailto', 'tel'],
   allowedSchemesAppliedToAttributes: ['href'],
   // Image base64 (Tiptap inline images) needs explicit allowance.
   allowedSchemesByTag: {
     img: ['http', 'https', 'data'],
+  },
+  // Only let `text-align` through `style` — anything else (`background`,
+  // `position: fixed`, `transform: …`) is stripped.
+  allowedStyles: {
+    '*': {
+      'text-align': [/^(left|center|right|justify)$/],
+    },
   },
   // Disallow unknown tags by default (sanitize-html's default is to drop).
   disallowedTagsMode: 'discard',
@@ -71,6 +90,17 @@ const OPTIONS: sanitizeHtml.IOptions = {
       if (attribs.target === '_blank') {
         attribs.rel = 'noopener noreferrer';
       }
+      return { tagName, attribs };
+    },
+    // Task-list checkboxes are persisted as `disabled` — only the editor
+    // surface re-enables them when the user is actively editing. This
+    // prevents persisted HTML from submitting forms or being interactive
+    // outside our render context.
+    input: (tagName, attribs) => {
+      if (attribs.type !== 'checkbox') {
+        return { tagName: '', attribs: {} };
+      }
+      attribs.disabled = 'disabled';
       return { tagName, attribs };
     },
   },

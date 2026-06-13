@@ -7,11 +7,25 @@ import { ActivityAction } from '@prisma/client';
 import { MSG, USER_SELECT_BASIC } from '@/core/constants';
 import { PrismaService } from '@/core/database/prisma.service';
 import { assertProjectAccess } from '@/core/utils';
+import { RealtimeEventsService } from '@/modules/events/events.service';
+import { REALTIME_EVENTS } from '@/modules/events/events.types';
 import { CreateWorklogDto, UpdateWorklogDto } from './dto';
 
 @Injectable()
 export class WorklogsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private realtime: RealtimeEventsService,
+  ) {}
+
+  private emit(projectId: string, issueId: string, actorId: string) {
+    this.realtime.emit({
+      type: REALTIME_EVENTS.WORKLOG_CHANGED,
+      actorId,
+      projectId,
+      issueId,
+    });
+  }
 
   async create(issueId: string, userId: string, dto: CreateWorklogDto) {
     const issue = await this.prisma.issue.findUnique({
@@ -29,7 +43,7 @@ export class WorklogsService {
     // Worklog + activity commit together. A crash between the two would
     // either inflate billing reports (worklog without audit) or hide work
     // (activity without underlying worklog).
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const worklog = await tx.worklog.create({
         data: {
           issueId,
@@ -50,6 +64,8 @@ export class WorklogsService {
       });
       return worklog;
     });
+    this.emit(issue.project.id, issueId, userId);
+    return result;
   }
 
   async findByIssue(issueId: string, userId: string) {
@@ -93,7 +109,7 @@ export class WorklogsService {
     if (worklog.userId !== userId)
       throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);
 
-    return this.prisma.worklog.update({
+    const updated = await this.prisma.worklog.update({
       where: { id: worklogId },
       data: {
         ...(dto.timeSpent !== undefined && { timeSpent: dto.timeSpent }),
@@ -104,6 +120,8 @@ export class WorklogsService {
       },
       include: { user: USER_SELECT_BASIC },
     });
+    this.emit(worklog.issue.project.id, worklog.issueId, userId);
+    return updated;
   }
 
   async delete(worklogId: string, userId: string) {
@@ -125,6 +143,10 @@ export class WorklogsService {
     if (worklog.userId !== userId)
       throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);
 
-    return this.prisma.worklog.delete({ where: { id: worklogId } });
+    const result = await this.prisma.worklog.delete({
+      where: { id: worklogId },
+    });
+    this.emit(worklog.issue.project.id, worklog.issueId, userId);
+    return result;
   }
 }

@@ -112,10 +112,14 @@ describe('CommentsService.create() — mention notifications', () => {
     notifications = { createMany: jest.fn(), create: jest.fn() };
     webhooks = { dispatch: jest.fn() };
 
+    // `realtime` is a fire-and-forget bus — pass a stub that swallows
+    // calls so the service can keep emitting without exploding the tests.
+    const realtime = { emit: jest.fn() };
     service = new CommentsService(
       prisma as never,
       notifications as never,
       webhooks as never,
+      realtime as never,
     );
   });
 

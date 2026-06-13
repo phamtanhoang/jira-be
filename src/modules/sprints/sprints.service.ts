@@ -8,13 +8,31 @@ import { MSG } from '@/core/constants';
 import { DAY_MS } from '@/core/constants/time.constant';
 import { PrismaService } from '@/core/database/prisma.service';
 import { assertProjectAccess } from '@/core/utils';
+import { RealtimeEventsService } from '@/modules/events/events.service';
+import { REALTIME_EVENTS } from '@/modules/events/events.types';
 import { CreateSprintDto, UpdateSprintDto } from './dto';
 
 type DailyStatusRow = { day: Date; category: StatusCategory; count: bigint };
 
 @Injectable()
 export class SprintsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private realtime: RealtimeEventsService,
+  ) {}
+
+  /**
+   * Fire-and-forget realtime emit for sprint mutations. Keeps the
+   * emit-site noise low — every sprint-touching method just calls
+   * `this.emit(projectId, userId)` after the DB commit.
+   */
+  private emit(projectId: string, actorId: string) {
+    this.realtime.emit({
+      type: REALTIME_EVENTS.SPRINT_UPDATED,
+      actorId,
+      projectId,
+    });
+  }
 
   /**
    * Cumulative Flow Diagram data — for each day in the window, count of issues
@@ -115,9 +133,9 @@ export class SprintsService {
   }
 
   async create(userId: string, dto: CreateSprintDto) {
-    await this.assertBoardAccess(dto.boardId, userId);
+    const board = await this.assertBoardAccess(dto.boardId, userId);
 
-    return this.prisma.sprint.create({
+    const sprint = await this.prisma.sprint.create({
       data: {
         boardId: dto.boardId,
         name: dto.name,
@@ -126,6 +144,8 @@ export class SprintsService {
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
       },
     });
+    this.emit(board.projectId, userId);
+    return sprint;
   }
 
   async findById(sprintId: string, userId: string) {
@@ -151,7 +171,7 @@ export class SprintsService {
   async update(sprintId: string, userId: string, dto: UpdateSprintDto) {
     const sprint = await this.findById(sprintId, userId);
 
-    return this.prisma.sprint.update({
+    const updated = await this.prisma.sprint.update({
       where: { id: sprint.id },
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
@@ -161,7 +181,10 @@ export class SprintsService {
         }),
         ...(dto.endDate !== undefined && { endDate: new Date(dto.endDate) }),
       },
+      include: { board: { select: { projectId: true } } },
     });
+    this.emit(updated.board.projectId, userId);
+    return updated;
   }
 
   async start(sprintId: string, userId: string) {
@@ -173,7 +196,7 @@ export class SprintsService {
     // ACTIVE sprints on the same board. Inside `$transaction` we use
     // `updateMany` with a status guard so the database, not the app,
     // enforces "still PLANNING when we flip it".
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const activeSprint = await tx.sprint.findFirst({
         where: { boardId: sprint.boardId, status: SprintStatus.ACTIVE },
         select: { id: true },
@@ -193,8 +216,13 @@ export class SprintsService {
         // not PLANNING anymore.
         throw new BadRequestException(MSG.ERROR.SPRINT_ALREADY_ACTIVE);
       }
-      return tx.sprint.findUniqueOrThrow({ where: { id: sprint.id } });
+      return tx.sprint.findUniqueOrThrow({
+        where: { id: sprint.id },
+        include: { board: { select: { projectId: true } } },
+      });
     });
+    this.emit(result.board.projectId, userId);
+    return result;
   }
 
   async complete(sprintId: string, userId: string) {
@@ -207,7 +235,7 @@ export class SprintsService {
     // COMPLETED in one commit. Without the transaction, a failure between
     // the two writes could orphan in-flight issues against a still-ACTIVE
     // sprint, blocking other sprints from starting.
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.issue.updateMany({
         where: {
           sprintId: sprint.id,
@@ -218,12 +246,19 @@ export class SprintsService {
       return tx.sprint.update({
         where: { id: sprint.id },
         data: { status: SprintStatus.COMPLETED, endDate: new Date() },
+        include: { board: { select: { projectId: true } } },
       });
     });
+    this.emit(result.board.projectId, userId);
+    return result;
   }
 
   async delete(sprintId: string, userId: string) {
     const sprint = await this.findById(sprintId, userId);
+    const board = await this.prisma.board.findUnique({
+      where: { id: sprint.boardId },
+      select: { projectId: true },
+    });
 
     // Unassign issues from this sprint
     await this.prisma.issue.updateMany({
@@ -231,7 +266,11 @@ export class SprintsService {
       data: { sprintId: null },
     });
 
-    return this.prisma.sprint.delete({ where: { id: sprint.id } });
+    const result = await this.prisma.sprint.delete({
+      where: { id: sprint.id },
+    });
+    if (board) this.emit(board.projectId, userId);
+    return result;
   }
 
   async getBurndown(sprintId: string, userId: string) {

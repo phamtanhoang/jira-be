@@ -67,7 +67,8 @@ describe('SprintsService.getBurndown()', () => {
 
   beforeEach(() => {
     prisma = createMockPrisma();
-    service = new SprintsService(prisma as never);
+    const realtimeStub = { emit: jest.fn() };
+    service = new SprintsService(prisma as never, realtimeStub as never);
   });
 
   it('returns empty result when sprint has no startDate', async () => {

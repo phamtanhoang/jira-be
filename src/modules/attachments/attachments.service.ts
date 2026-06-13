@@ -10,6 +10,8 @@ import {
   createSignedUrl,
 } from '@/core/utils';
 import { AdminAuditService } from '@/modules/admin-audit/admin-audit.service';
+import { RealtimeEventsService } from '@/modules/events/events.service';
+import { REALTIME_EVENTS } from '@/modules/events/events.types';
 import { SettingsService } from '@/modules/settings/settings.service';
 
 @Injectable()
@@ -18,6 +20,7 @@ export class AttachmentsService {
     private prisma: PrismaService,
     private audit: AdminAuditService,
     private settings: SettingsService,
+    private realtime: RealtimeEventsService,
   ) {}
 
   async uploadMany(
@@ -116,6 +119,13 @@ export class AttachmentsService {
           },
         });
         return rows;
+      });
+      this.realtime.emit({
+        type: REALTIME_EVENTS.ATTACHMENT_ADDED,
+        actorId: userId,
+        projectId: issue.project.id,
+        issueId,
+        data: { count: attachments.length },
       });
       return attachments;
     } catch (err) {
@@ -234,6 +244,14 @@ export class AttachmentsService {
         issueId: attachment.issueId,
       },
     });
+
+    this.realtime.emit({
+      type: REALTIME_EVENTS.ATTACHMENT_DELETED,
+      actorId: userId,
+      projectId: attachment.issue.project.id,
+      issueId: attachment.issueId,
+    });
+
     return result;
   }
 }

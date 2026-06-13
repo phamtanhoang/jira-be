@@ -6,7 +6,7 @@ import {
   ShareTokenExpiredException,
   ShareTokenNotFoundException,
 } from '@/core/exceptions';
-import { generateShareToken } from '@/core/utils';
+import { createSignedUrl, generateShareToken } from '@/core/utils';
 import { IssuesService } from '../issues.service';
 
 @Injectable()
@@ -90,12 +90,37 @@ export class IssuesShareService {
             fileName: true,
             mimeType: true,
             fileSize: true,
+            fileUrl: true,
             createdAt: true,
           },
         },
+        // Surface basic sprint/epic identity so the guest can see context
+        // ("this issue is part of Sprint 12, Epic Mobile MVP") without
+        // exposing the full sprint/epic detail behind those names.
+        sprint: { select: { id: true, name: true, status: true } },
+        epic: { select: { id: true, key: true, summary: true } },
+        parent: { select: { id: true, key: true, summary: true } },
       },
     });
     if (!issue) throw new IssueNotFoundException();
+
+    // Enrich attachments with short-TTL signed URLs (5 min). The guest
+    // gets a viewable URL but can't bookmark/leak it long term — a
+    // reload generates a fresh URL. fileUrl itself is stripped from
+    // the response so the underlying storage path never reaches the
+    // browser.
+    const ATTACHMENT_TTL_SEC = 300;
+    const enrichedAttachments = await Promise.all(
+      (issue.attachments ?? []).map(async (a) => {
+        const signedUrl = await createSignedUrl(a.fileUrl, ATTACHMENT_TTL_SEC);
+        // Strip fileUrl from the response — guest only ever sees the
+        // signed URL. `fileUrl` is the raw storage path used for our
+        // own delete/move operations.
+        const { fileUrl: _fileUrl, ...rest } = a;
+        void _fileUrl;
+        return { ...rest, signedUrl: signedUrl ?? null };
+      }),
+    );
 
     void this.prisma.issueShareToken
       .update({
@@ -104,6 +129,6 @@ export class IssuesShareService {
       })
       .catch(() => null);
 
-    return issue;
+    return { ...issue, attachments: enrichedAttachments };
   }
 }

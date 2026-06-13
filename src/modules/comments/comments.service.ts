@@ -12,6 +12,8 @@ import {
   extractMentions,
   sanitizeRichHtml,
 } from '@/core/utils';
+import { RealtimeEventsService } from '@/modules/events/events.service';
+import { REALTIME_EVENTS } from '@/modules/events/events.types';
 import { NotificationsService } from '@/modules/notifications/notifications.service';
 import { WebhooksService } from '@/modules/webhooks/webhooks.service';
 import { CreateCommentDto, UpdateCommentDto } from './dto';
@@ -22,6 +24,7 @@ export class CommentsService {
     private prisma: PrismaService,
     private notifications: NotificationsService,
     private webhooks: WebhooksService,
+    private realtime: RealtimeEventsService,
   ) {}
 
   async create(issueId: string, userId: string, dto: CreateCommentDto) {
@@ -132,6 +135,17 @@ export class CommentsService {
       link: `/issues/${issue.key}`,
     });
 
+    // Realtime — every open issue-detail viewer refreshes their comments
+    // + activity feed. ProjectId routes the event to project-scope
+    // subscribers too (so the card's comment-count badge updates).
+    this.realtime.emit({
+      type: REALTIME_EVENTS.COMMENT_ADDED,
+      actorId: userId,
+      projectId: issue.project.id,
+      issueId,
+      issueKey: issue.key,
+    });
+
     return comment;
   }
 
@@ -207,6 +221,14 @@ export class CommentsService {
       });
       return u;
     });
+
+    this.realtime.emit({
+      type: REALTIME_EVENTS.COMMENT_UPDATED,
+      actorId: userId,
+      projectId: comment.issue.project.id,
+      issueId: comment.issueId,
+    });
+
     return updated;
   }
 
@@ -232,7 +254,7 @@ export class CommentsService {
     if (comment.authorId !== userId)
       throw new ForbiddenException(MSG.ERROR.NOT_AUTHOR);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const deleted = await tx.comment.delete({ where: { id: commentId } });
       await tx.activity.create({
         data: {
@@ -244,6 +266,15 @@ export class CommentsService {
       });
       return deleted;
     });
+
+    this.realtime.emit({
+      type: REALTIME_EVENTS.COMMENT_DELETED,
+      actorId: userId,
+      projectId: comment.issue.project.id,
+      issueId: comment.issueId,
+    });
+
+    return result;
   }
 }
 

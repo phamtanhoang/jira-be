@@ -7,8 +7,10 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 export class UpdateIssueDto {
@@ -35,9 +37,19 @@ export class UpdateIssueDto {
   priority?: IssuePriority;
 
   @ApiPropertyOptional({ example: 'user-uuid' })
-  @IsString()
   @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsUUID()
   assigneeId?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'user-uuid',
+    description:
+      'Reporter (filer) — service enforces LEAD/ADMIN to change this.',
+  })
+  @IsOptional()
+  @IsUUID()
+  reporterId?: string;
 
   @ApiPropertyOptional()
   @IsString()
