@@ -236,6 +236,22 @@ export class IssuesController {
     return this.issuesService.findById(id, user.id);
   }
 
+  // ⚠ Route order matters. `BULK_UPDATE` (literal `/bulk`) MUST be declared
+  // BEFORE `BY_ID` (`/:id`) — Express matches routes in registration order,
+  // and `:id` swallows the string "bulk". The previous order routed
+  // `PATCH /issues/bulk` into `update()` with `id="bulk"`, then
+  // `UpdateIssueDto` rejected the body with 400 "property issueIds should
+  // not exist" — same class of bug as boards `/columns/reorder`.
+  @Patch(E.BULK_UPDATE)
+  @ApiOperation({ summary: 'Bulk update issues (sprint, assignee, priority)' })
+  async bulkUpdate(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: BulkUpdateIssueDto,
+  ) {
+    const result = await this.issuesService.bulkUpdate(user.id, dto);
+    return { message: MSG.SUCCESS.ISSUE_UPDATED, ...result };
+  }
+
   @Patch(E.BY_ID)
   @ApiOperation({ summary: 'Update issue' })
   async update(
@@ -256,16 +272,6 @@ export class IssuesController {
   ) {
     const issue = await this.issuesService.move(id, user.id, dto);
     return { message: MSG.SUCCESS.ISSUE_MOVED, issue };
-  }
-
-  @Patch(E.BULK_UPDATE)
-  @ApiOperation({ summary: 'Bulk update issues (sprint, assignee, priority)' })
-  async bulkUpdate(
-    @CurrentUser() user: AuthUser,
-    @Body() dto: BulkUpdateIssueDto,
-  ) {
-    const result = await this.issuesService.bulkUpdate(user.id, dto);
-    return { message: MSG.SUCCESS.ISSUE_UPDATED, ...result };
   }
 
   @Delete(E.BULK_DELETE)

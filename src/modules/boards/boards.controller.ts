@@ -41,6 +41,28 @@ export class BoardsController {
     return { message: MSG.SUCCESS.COLUMN_CREATED, column };
   }
 
+  // ⚠ Route order matters. `REORDER_COLUMNS` (literal `…/columns/reorder`)
+  // MUST be declared BEFORE `COLUMN_BY_ID` (`…/columns/:columnId`) — Express
+  // matches routes in registration order, and `:columnId` swallows the
+  // string "reorder". The previous order routed `PATCH …/columns/reorder`
+  // into `updateColumn` with `columnId="reorder"`, then `UpdateColumnDto`
+  // rejected the body with 400 "property columnIds should not exist"
+  // (production bug, June 2026).
+  @Patch(E.REORDER_COLUMNS)
+  @ApiOperation({ summary: 'Reorder columns' })
+  async reorderColumns(
+    @Param('boardId') boardId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ReorderColumnsDto,
+  ) {
+    const columns = await this.boardsService.reorderColumns(
+      boardId,
+      user.id,
+      dto,
+    );
+    return { message: MSG.SUCCESS.COLUMNS_REORDERED, columns };
+  }
+
   @Patch(E.COLUMN_BY_ID)
   @ApiOperation({ summary: 'Update column' })
   async updateColumn(
@@ -67,20 +89,5 @@ export class BoardsController {
   ) {
     await this.boardsService.deleteColumn(boardId, columnId, user.id);
     return { message: MSG.SUCCESS.COLUMN_DELETED };
-  }
-
-  @Patch(E.REORDER_COLUMNS)
-  @ApiOperation({ summary: 'Reorder columns' })
-  async reorderColumns(
-    @Param('boardId') boardId: string,
-    @CurrentUser() user: AuthUser,
-    @Body() dto: ReorderColumnsDto,
-  ) {
-    const columns = await this.boardsService.reorderColumns(
-      boardId,
-      user.id,
-      dto,
-    );
-    return { message: MSG.SUCCESS.COLUMNS_REORDERED, columns };
   }
 }
