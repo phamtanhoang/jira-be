@@ -71,10 +71,6 @@ docs: clarify ARCHITECTURE.md
 refactor(cache): reduce wrap signature
 ```
 
-## Reporting issues
-
-Open a GitHub issue with: reproduction steps, expected vs actual, NestJS startup logs if relevant. For security issues, see [SECURITY.md](./SECURITY.md) — do **not** open a public issue.
-
 ## Architecture deep-dive
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for module dependency graph, façade rationale (IssuesService split), cache tag matrix, and request lifecycle.

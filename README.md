@@ -3,7 +3,7 @@
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 [![NestJS](https://img.shields.io/badge/NestJS-11-E0234E)](https://nestjs.com)
 [![Prisma](https://img.shields.io/badge/Prisma-7-2D3748)](https://www.prisma.io)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6)](https://www.typescriptlang.org)
 
 NestJS backend for a Jira-like project management tool.
@@ -12,8 +12,6 @@ NestJS backend for a Jira-like project management tool.
 
 📐 **[ARCHITECTURE.md](./ARCHITECTURE.md)** — module dependency graph, façade rationale, cache tag matrix, request lifecycle.
 🤝 **[CONTRIBUTING.md](./CONTRIBUTING.md)** — quick start + PR checklist + conventions.
-🔒 **[SECURITY.md](./SECURITY.md)** — responsible disclosure policy.
-📝 **[CHANGELOG.md](../CHANGELOG.md)** — recent changes grouped by phase.
 
 ## Tech Stack
 
@@ -127,6 +125,3 @@ prisma/
 └── app-settings.prisma        # App settings (key-value JSON)
 ```
 
-## Author
-
-[phamtanhoang](https://github.com/phamtanhoang)
